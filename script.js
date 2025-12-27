@@ -460,7 +460,7 @@ function updateModeDisplay() {
             welcomeTitle.textContent = `Selamat datang ${currentUser.nama || currentUser.username} di Mode Steering Committee`;
         }
         if (welcomeSubtitle) {
-            welcomeSubtitle.textContent = 'Anda dapat mengedit tugas dalam mode ini';
+            welcomeSubtitle.textContent = 'Anda dapat mengedit program kerja dalam mode ini';
         }
 
         // Show indicator and start polling
@@ -482,10 +482,10 @@ function updateModeDisplay() {
             kontenTab.style.cursor = 'pointer';
         }
         if (welcomeTitle) {
-            welcomeTitle.textContent = 'Selamat datang di Himagro Hub (Proker & Content Planner)';
+            welcomeTitle.textContent = 'Selamat datang di HIMAGRO HUB';
         }
         if (welcomeSubtitle) {
-            welcomeSubtitle.textContent = 'Dashboard monitoring Program Kerja dan Konten Media Sosia Himagro';
+            welcomeSubtitle.textContent = 'Dashboard monitoring Program Kerja dan Konten Media Sosial HIMAGRO';
         }
 
         // Hide indicator and stop polling

@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <meta name="description"
+        content="HIMAGRO Hub - Sistem manajemen data Program Kerja dan Konten Kominfo untuk Himpunan Mahasiswa Agroteknologi">
+    <meta name="theme-color" content="#16a34a">
+    <title>HIMAGRO Hub - Data Management</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <!-- Top Navigation Bar -->
+    <nav class="top-nav">
+        <div class="nav-container">
+            <div class="nav-left">
+                <div class="nav-logo-container">
+                    <div class="logo-wrapper">
+                        <img src="logo/Unsil.png" alt="Unsil" class="logo-item">
+                        <img src="logo/Himagro.png" alt="Himagro" class="logo-item">
+                        <img src="logo/Kabinet.png" alt="Kabinet" class="logo-item">
+                        <img src="logo/BluSpeed.png" alt="BluSpeed" class="logo-item">
+                        <img src="logo/Berdampak.png" alt="Berdampak" class="logo-item">
+                    </div>
+                </div>
+            </div>
+            <div class="nav-right">
+                <div id="sc-active-indicator" class="sc-active-indicator" style="display: none;">
+                    <div class="sc-status-dot"></div>
+                    <span id="sc-active-count">0 aktif</span>
+                    <div class="sc-active-tooltip">
+                        <strong>SC Online:</strong>
+                        <ul id="sc-active-names" class="sc-active-names"></ul>
+                    </div>
+                </div>
+                <button class="icon-btn" onclick="toggleDarkMode()" title="Switch to Light Mode">
+                    <span id="dark-mode-icon">☀️</span>
+                </button>
+                <button class="icon-btn" onclick="refreshData()" title="Refresh Data">
+                    <span>🔄</span>
+                </button>
+                <button class="icon-btn" onclick="clearCache()" title="Clear Cache">
+                    <span>🗑️</span>
+                </button>
+                <div class="mode-switcher">
+                    <span class="mode-badge" id="current-mode">Mode: Staff</span>
+                    <button class="btn btn-sm btn-outline" onclick="showLoginModal()" id="switch-mode-btn">
+                        Masuk Mode SC
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Welcome Banner -->
+        <div class="welcome-banner" id="welcome-banner">
+            <div class="welcome-content">
+                <h2>Selamat Datang di HIMAGRO Hub</h2>
+                <p>Sistem manajemen data untuk Program Kerja dan Konten Kominfo</p>
+            </div>
+        </div>
+
+        <!-- Section Selector Tabs -->
+        <div class="section-tabs">
+            <button class="tab-btn active" onclick="switchSection('proker')" id="tab-proker">
+                📊 Data Proker
+            </button>
+            <button class="tab-btn" onclick="switchSection('konten')" id="tab-konten">
+                📰 Konten Kominfo
+            </button>
+        </div>
+
+        <!-- Proker Section - Full CRUD -->
+        <section class="section" id="proker-section">
+            <div class="section-header">
+                <h2>Data Proker</h2>
+                <div class="section-actions">
+                    <div class="view-toggle">
+                        <button class="view-btn active" data-view="monthly" onclick="setProkerView('monthly')">
+                            <span>📅</span> Per Bulan
+                        </button>
+                        <button class="view-btn" data-view="all" onclick="setProkerView('all')">
+                            <span>📋</span> Semua
+                        </button>
+                        <button class="view-btn" data-view="calendar" onclick="setProkerView('calendar')">
+                            <span>🗓️</span> Kalender
+                        </button>
+                    </div>
+                    <button class="btn btn-primary" onclick="showAddProkerModal()" id="add-proker-btn"
+                        style="display: none;">
+                        <span>+</span> Tambah Proker
+                    </button>
+                </div>
+            </div>
+
+            <!-- Month Filter (for monthly view) -->
+            <div class="filter-container" id="proker-month-filter">
+                <label>Pilih Bulan:</label>
+                <select id="proker-month-select" onchange="filterProkerByMonth()">
+                    <option value="">Semua Bulan</option>
+                </select>
+            </div>
+
+            <div class="search-bar">
+                <input type="text" id="proker-search" placeholder="Cari proker..." onkeyup="searchProker()">
+            </div>
+
+            <!-- Bulk Actions Bar -->
+            <div id="proker-bulk-actions" class="bulk-actions-bar" style="display: none;">
+                <span id="selected-count">0 item terpilih</span>
+                <div class="bulk-btns">
+                    <button class="btn btn-danger btn-sm" onclick="deleteSelectedProker()">
+                        <span>🗑️</span> Hapus Terpilih
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="clearProkerSelection()">
+                        Batal
+                    </button>
+                </div>
+            </div>
+
+            <!-- Monthly List View -->
+            <div id="proker-monthly-view" class="data-view">
+                <div id="proker-monthly-content"></div>
+            </div>
+
+            <!-- All List View -->
+            <div id="proker-all-view" class="data-view" style="display: none;">
+                <div class="table-container">
+                    <table id="proker-table">
+                        <thead>
+                            <tr>
+                                <th class="sc-only-header" style="width: 40px; text-align: center; display: none;">
+                                    <input type="checkbox" id="select-all-proker"
+                                        onclick="toggleAllProkerSelection(this.checked)">
+                                </th>
+                                <th>No</th>
+                                <th>Nama Proker</th>
+                                <th>Divisi ID</th>
+                                <th>Tanggal</th>
+                                <th>Progress</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="proker-tbody">
+                            <tr>
+                                <td colspan="6" class="loading">Memuat data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Calendar View -->
+            <div id="proker-calendar-view" class="data-view" style="display: none;">
+                <div class="calendar-controls">
+                    <button class="icon-btn" onclick="changeCalendarMonth(-1)">◀</button>
+                    <h3 id="calendar-month-year"></h3>
+                    <button class="icon-btn" onclick="changeCalendarMonth(1)">▶</button>
+                </div>
+                <div id="calendar-container"></div>
+            </div>
+        </section>
+
+        <!-- Konten Kominfo Section - Read Only -->
+        <section class="section" id="konten-section" style="display: none;">
+            <div class="section-header">
+                <h2>Konten Kominfo</h2>
+                <div class="section-actions">
+                    <div class="view-toggle">
+                        <button class="view-btn active" data-view="monthly" onclick="setKontenView('monthly')">
+                            <span>📅</span> Per Bulan
+                        </button>
+                        <button class="view-btn" data-view="all" onclick="setKontenView('all')">
+                            <span>📋</span> Semua
+                        </button>
+                        <button class="view-btn" data-view="calendar" onclick="setKontenView('calendar')">
+                            <span>🗓️</span> Kalender
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Month Filter (for monthly view) -->
+            <div class="filter-container" id="konten-month-filter">
+                <label>Pilih Bulan:</label>
+                <select id="konten-month-select" onchange="filterKontenByMonth()">
+                    <option value="">Semua Bulan</option>
+                </select>
+            </div>
+
+            <div class="search-bar">
+                <input type="text" id="konten-search" placeholder="Cari konten..." onkeyup="searchKonten()">
+            </div>
+
+            <!-- Monthly List View -->
+            <div id="konten-monthly-view" class="data-view">
+                <div id="konten-monthly-content"></div>
+            </div>
+
+            <!-- All List View -->
+            <div id="konten-all-view" class="data-view" style="display: none;">
+                <div class="table-container">
+                    <table id="konten-table">
+                        <thead>
+                            <tr>
+                                <th>No</th>
+                                <th>Nama Konten</th>
+                                <th>Tanggal</th>
+                            </tr>
+                        </thead>
+                        <tbody id="konten-tbody">
+                            <tr>
+                                <td colspan="3" class="loading">Memuat data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Calendar View -->
+            <div id="konten-calendar-view" class="data-view" style="display: none;">
+                <div class="calendar-controls">
+                    <button class="icon-btn" onclick="changeKontenCalendarMonth(-1)">◀</button>
+                    <h3 id="konten-calendar-month-year"></h3>
+                    <button class="icon-btn" onclick="changeKontenCalendarMonth(1)">▶</button>
+                </div>
+                <div id="konten-calendar-container"></div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Login Modal untuk Mode SC -->
+    <div id="login-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Masuk Mode SC</h3>
+                <span class="close" onclick="closeLoginModal()">&times;</span>
+            </div>
+            <form id="login-form" onsubmit="loginSC(event)">
+                <div class="form-group">
+                    <label for="login-username">Username *</label>
+                    <input type="text" id="login-username" required autocomplete="username">
+                </div>
+
+                <div class="form-group">
+                    <label for="login-password">Password *</label>
+                    <input type="password" id="login-password" required autocomplete="current-password">
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="login-remember">
+                        <label for="login-remember">Ingat Saya (Simpan Password)</label>
+                    </div>
+                </div>
+
+                <div class="modal-actions" style="justify-content: center;">
+                    <button type="button" class="btn btn-secondary" onclick="closeLoginModal()">Batal</button>
+                    <button type="submit" class="btn btn-primary">Masuk</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal untuk Tambah/Edit Proker -->
+    <div id="proker-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Tambah Proker Baru</h3>
+                <span class="close" onclick="closeProkerModal()">&times;</span>
+            </div>
+            <form id="proker-form" onsubmit="saveProker(event)">
+                <input type="hidden" id="proker-id" value="">
+
+                <div class="form-group">
+                    <label for="proker-nama">Nama Proker *</label>
+                    <input type="text" id="proker-nama" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="proker-divisi-id">Divisi ID</label>
+                    <select id="proker-divisi-id">
+                        <option value="">Pilih Divisi</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="proker-pic-id">PIC ID</label>
+                    <select id="proker-pic-id">
+                        <option value="">Pilih PIC</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="proker-tanggal">Tanggal Pelaksanaan *</label>
+                    <input type="date" id="proker-tanggal" required>
+                </div>
+
+                <div class="checkbox-group">
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="proker-proposal">
+                        <label for="proker-proposal">Proposal</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="proker-rak">
+                        <label for="proker-rak">RAK</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="proker-rab">
+                        <label for="proker-rab">RAB</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="proker-lpj">
+                        <label for="proker-lpj">LPJ</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="proker-status-selesai">
+                        <label for="proker-status-selesai">Selesai (Seluruh Tahapan)</label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <label>Data Rapat</label>
+                        <button type="button" class="btn btn-sm" style="background: var(--success-color); color: white;"
+                            onclick="addRapatForm()">
+                            <span>+</span> Tambah Rapat
+                        </button>
+                    </div>
+                    <div id="rapat-forms-container">
+                        <!-- Rapat forms akan ditambahkan di sini -->
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeProkerModal()">Batal</button>
+                    <button type="submit" class="btn btn-primary">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal untuk Detail Proker -->
+    <div id="proker-detail-modal" class="modal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h3>Detail Proker</h3>
+                <span class="close" onclick="closeProkerDetailModal()">&times;</span>
+            </div>
+            <div style="padding: 1.5rem;">
+                <div class="detail-section">
+                    <h4>Informasi Proker</h4>
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <label>Nama Proker:</label>
+                            <span id="detail-proker-nama">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Proker ID:</label>
+                            <span id="detail-proker-id">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Divisi ID:</label>
+                            <span id="detail-proker-divisi">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>PIC ID:</label>
+                            <span id="detail-proker-pic">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Tanggal Pelaksanaan:</label>
+                            <span id="detail-proker-tanggal">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Proposal:</label>
+                            <span id="detail-proker-proposal">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>RAK:</label>
+                            <span id="detail-proker-rak">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>RAB:</label>
+                            <span id="detail-proker-rab">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>LPJ:</label>
+                            <span id="detail-proker-lpj">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Status:</label>
+                            <span id="detail-proker-status">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="detail-section" style="margin-top: 2rem;">
+                    <h4>Data Rapat</h4>
+                    <div id="detail-rapat-list"></div>
+                </div>
+            </div>
+            <div class="modal-actions" style="justify-content: center;">
+                <button type="button" class="btn btn-secondary" onclick="closeProkerDetailModal()">Tutup</button>
+            </div>
+        </div>
+    </div>
+    </div>
+    </div>
+
+    <!-- Modal untuk Detail Hari di Kalender -->
+    <div id="calendar-day-modal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3 id="calendar-day-title">Detail Tanggal</h3>
+                <!-- Close icon removed per request -->
+            </div>
+            <div style="padding: 1.5rem;">
+                <div id="calendar-day-list" class="rapat-item-form"
+                    style="background: transparent; border: none; padding: 0;">
+                    <!-- List items akan muncul di sini -->
+                </div>
+            </div>
+            <div class="modal-actions" style="justify-content: center; margin-top: 1rem;">
+                <button type="button" class="btn btn-secondary" onclick="closeCalendarDayModal()">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Confirmation Modal -->
+    <div id="confirm-modal" class="modal">
+        <div class="modal-content" style="max-width: 400px; text-align: center; overflow: hidden;">
+            <div class="modal-header" style="justify-content: center;">
+                <h3 id="confirm-title">Konfirmasi</h3>
+            </div>
+            <div style="padding: 2rem;">
+                <p id="confirm-message" style="margin-bottom: 2rem; color: var(--text-primary); line-height: 1.5;"></p>
+                <div class="modal-actions" style="justify-content: center; gap: 1rem; border-top: none; padding: 0;">
+                    <button type="button" id="confirm-cancel-btn" class="btn btn-secondary">Batal</button>
+                    <button type="button" id="confirm-ok-btn" class="btn btn-danger">Ya, Hapus</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast"></div>
+
+    <!-- Floating Batch Save Button -->
+    <div id="batch-save-container" class="batch-save-container">
+        <div class="batch-save-content">
+            <span id="batch-count">0</span> perubahan belum disimpan
+            <div class="batch-save-actions">
+                <button class="btn btn-secondary btn-sm" onclick="discardBatchChanges()">Batal</button>
+                <button class="btn btn-primary btn-sm" onclick="saveBatchChanges()">Simpan Perubahan</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

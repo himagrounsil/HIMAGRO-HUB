@@ -202,6 +202,29 @@ function doPost(e) {
           data: createProker(postData, username, scId, nama)
         })).setMimeType(ContentService.MimeType.JSON);
         
+      case 'batchCreateProker':
+        const prokersToCreate = postData.prokers || [];
+        const createResults = [];
+        const createLock = LockService.getScriptLock();
+        try {
+          createLock.waitLock(60000); // 1 min
+          prokersToCreate.forEach(pData => {
+            try {
+              const res = createProker(pData, pData.username, pData.scId, pData.scNama, true);
+              createResults.push({ success: true, data: res });
+            } catch (err) {
+              createResults.push({ success: false, message: err.toString() });
+            }
+          });
+        } finally {
+          createLock.releaseLock();
+        }
+        return ContentService.createTextOutput(JSON.stringify({
+          success: true,
+          data: createResults
+        })).setMimeType(ContentService.MimeType.JSON);
+
+        
       case 'updateProker':
         const updateId = (e.parameter && e.parameter.id) ? e.parameter.id : null;
         if (!updateId) {

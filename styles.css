@@ -87,8 +87,7 @@ body::after {
 
 /* Optimize Rendering */
 .month-group,
-.table-container,
-.calendar-grid {
+.table-container {
     content-visibility: auto;
     /* Skip rendering off-screen content */
     contain-intrinsic-size: 500px;
@@ -789,6 +788,18 @@ tbody tr:hover {
     box-shadow: var(--shadow-lg), var(--shadow-glow);
 }
 
+.btn-success {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    box-shadow: var(--shadow);
+}
+
+.btn-success:hover {
+    filter: brightness(1.1);
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: var(--shadow-lg), rgba(16, 185, 129, 0.3) 0 0 20px;
+}
+
 .btn-secondary {
     background: var(--secondary-color);
     color: white;
@@ -850,6 +861,10 @@ tbody tr:hover {
     /* backdrop-filter: blur(4px); REMOVED for performance */
     opacity: 0;
     transition: opacity 0.2s ease;
+}
+
+#confirm-modal {
+    z-index: 1500;
 }
 
 .modal.show {
@@ -1250,16 +1265,25 @@ form {
     .nav-container {
         padding: 0 1rem;
         flex-direction: column;
+        align-items: center;
         gap: 0.75rem;
     }
 
+    .nav-left,
     .nav-right {
         width: 100%;
+        display: flex;
         justify-content: center;
+        align-items: center;
+    }
+
+    .nav-right {
+        flex-direction: column;
+        gap: 0.75rem;
     }
 
     .mode-switcher {
-        flex-wrap: wrap;
+        width: 100%;
         justify-content: center;
     }
 
@@ -1298,13 +1322,25 @@ form {
 
     .view-toggle {
         width: 100%;
+        justify-content: center;
+        overflow-x: auto;
     }
 
-    .view-btn {
+    .sc-active-indicator {
+        margin-right: 0;
+        margin-bottom: 0.5rem;
+    }
+
+    .calendar-controls {
+        flex-direction: row;
+        /* Keep arrow buttons on sides */
+        gap: 1rem;
+    }
+
+    .calendar-controls h3 {
+        font-size: 1.1rem;
+        min-width: auto;
         flex: 1;
-        justify-content: center;
-        padding: 0.6rem 0.75rem;
-        font-size: 0.8rem;
     }
 
     .section-tabs {
@@ -1509,20 +1545,70 @@ tr.status-success td:first-child {
 }
 
 /* Responsive untuk berbagai device dan orientasi */
+/* Responsive Mobile Optimizations */
 @media (max-width: 480px) {
     .container {
         padding: 0.75rem;
     }
 
     .nav-container {
-        padding: 0 0.75rem;
+        padding: 0.5rem;
         flex-direction: column;
-        align-items: stretch;
+        align-items: center;
+        /* Center everything */
+        gap: 1rem;
+    }
+
+    .nav-left,
+    .nav-right {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
     }
 
     .nav-right {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .nav-logo-container {
         width: 100%;
-        justify-content: space-between;
+        justify-content: center;
+        display: flex;
+        margin-bottom: 0.5rem;
+    }
+
+    .logo-wrapper {
+        justify-content: center;
+        width: auto;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .nav-right {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 1rem;
+    }
+
+    .mode-switcher {
+        width: 100%;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.5rem;
+        display: flex;
+        flex-direction: column;
+        /* Stack info and button on very small screens */
+        align-items: center;
+    }
+
+    .mode-badge {
+        margin-bottom: 0.25rem;
     }
 
     .section {
@@ -1532,15 +1618,97 @@ tr.status-success td:first-child {
     .section-header {
         flex-direction: column;
         gap: 1rem;
+        text-align: center;
     }
 
     .view-toggle {
         width: 100%;
+        display: flex;
+        justify-content: center;
+        overflow-x: auto;
+        padding-bottom: 5px;
     }
 
     .view-btn {
-        font-size: 0.875rem;
-        padding: 0.5rem;
+        flex: 1;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 0.75rem;
+        padding: 0.5rem 0.25rem;
+        white-space: nowrap;
+        gap: 0.5rem;
+    }
+
+    /* Calendar Mobile Fixes - The "Ultimate" Fix */
+    #calendar-container,
+    #konten-calendar-container {
+        width: 100%;
+        overflow-x: auto !important;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        background: var(--card-bg);
+        display: block;
+        /* Ensure it behaves as a block */
+    }
+
+    .calendar-grid {
+        min-width: 850px;
+        /* Clearly wider than mobile screen */
+        display: grid !important;
+        grid-template-columns: repeat(7, 1fr) !important;
+        gap: 4px !important;
+        padding: 5px;
+    }
+
+    .calendar-day {
+        min-height: 110px;
+        aspect-ratio: auto;
+        padding: 0.25rem;
+        overflow: hidden;
+        background: var(--card-bg) !important;
+    }
+
+    .filter-container {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 100% !important;
+        text-align: center !important;
+        gap: 0.5rem !important;
+        margin-bottom: 1.5rem !important;
+    }
+
+    .filter-container label {
+        display: block;
+        width: 100%;
+        text-align: center;
+        margin-bottom: 0.25rem;
+    }
+
+    .filter-container select {
+        width: 100%;
+        max-width: 300px;
+        text-align: center;
+        text-align-last: center;
+        margin: 0 auto;
+    }
+
+    .search-bar {
+        display: flex !important;
+        justify-content: center !important;
+        width: 100% !important;
+        margin-bottom: 1.5rem;
+    }
+
+    .search-bar input {
+        width: 100%;
+        max-width: 300px;
+        text-align: center;
+        margin: 0 auto;
     }
 
     table {
@@ -1809,13 +1977,17 @@ tr.status-success td:first-child {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: var(--bg-secondary);
-    padding: 0.75rem 1.5rem;
+    background: var(--bg-color);
+    /* Use consistent background */
+    padding: 0.75rem 1rem;
     border-radius: 12px;
     margin-bottom: 1rem;
     border: 1px solid var(--primary-color);
     animation: slideDown 0.3s ease;
-    box-shadow: var(--shadow-glow-sm);
+    box-shadow: var(--shadow-lg);
+    flex-wrap: wrap;
+    /* Allow wrapping on small screens */
+    gap: 0.75rem;
 }
 
 .bulk-actions-bar span {

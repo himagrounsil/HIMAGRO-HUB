@@ -1115,6 +1115,11 @@ form {
     background: var(--danger-color);
 }
 
+.toast.warning {
+    background: var(--warning-color);
+    color: white;
+}
+
 @keyframes slideInRight {
     from {
         transform: translateX(100%);

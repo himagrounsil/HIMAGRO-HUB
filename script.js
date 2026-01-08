@@ -25,6 +25,8 @@ let currentCalendarMonth = new Date().getMonth();
 let currentCalendarYear = new Date().getFullYear();
 let currentKontenCalendarMonth = new Date().getMonth();
 let currentKontenCalendarYear = new Date().getFullYear();
+let bulkProkerCounter = 0;
+let rapatFormCounter = 0;
 
 // Polling intervals for SC indicator
 let presenceInterval = null;
@@ -250,9 +252,16 @@ function populateDivisiDropdown() {
     });
 }
 
-function populatePICDropdown() {
+
+function populatePICDropdown(filterDivisiId = null) {
     const select = document.getElementById('proker-pic-id');
     if (!select) return;
+
+    // Jika Divisi belum dipilih, reset dan tampilkan pesan
+    if (!filterDivisiId) {
+        select.innerHTML = '<option value="">Pilih Divisi Terlebih Dahulu</option>';
+        return;
+    }
 
     // Clear existing options except first
     select.innerHTML = '<option value="">Pilih PIC</option>';
@@ -262,8 +271,17 @@ function populatePICDropdown() {
         return;
     }
 
-    // Filter PIC yang memiliki nama saja (sesuai permintaan user)
-    const activePICs = masterPIC.filter(pic => pic.namaPic && pic.namaPic.trim() !== '');
+    // Filter PIC yang memiliki nama saja
+    let activePICs = masterPIC.filter(pic => pic.namaPic && pic.namaPic.trim() !== '');
+
+    // Filter by Divisi (Strict)
+    activePICs = activePICs.filter(pic => pic.divisiId === filterDivisiId);
+
+    if (activePICs.length === 0) {
+        const option = document.createElement('option');
+        option.text = "- Tidak ada PIC di divisi ini -";
+        select.appendChild(option);
+    }
 
     activePICs.forEach(pic => {
         const option = document.createElement('option');
@@ -272,6 +290,439 @@ function populatePICDropdown() {
         select.appendChild(option);
     });
 }
+
+// ... existing code ...
+
+async function showAddProkerModal() {
+    if (currentMode !== 'sc') {
+        showToast('Mode SC diperlukan untuk menambahkan data', 'error');
+        return;
+    }
+
+    if (!currentUser) {
+        showToast('Silakan login ke Mode SC terlebih dahulu', 'error');
+        return;
+    }
+
+    // Pastikan master data sudah di-load
+    if (!masterRapat || masterRapat.length === 0) {
+        showLoading();
+        try {
+            await loadMasterData();
+        } catch (error) {
+            console.error('Error loading master data:', error);
+        } finally {
+            hideLoading();
+        }
+    }
+
+    document.getElementById('modal-title').textContent = 'Tambah Proker Baru';
+    document.getElementById('proker-form').reset();
+    document.getElementById('proker-id').value = '';
+    document.getElementById('proker-divisi-id').value = '';
+    document.getElementById('proker-pic-id').value = '';
+
+    // Reset PIC dropdown (empty initially until division selected)
+    populatePICDropdown(null);
+
+    // Add event listener for division change
+    const divisiSelect = document.getElementById('proker-divisi-id');
+    divisiSelect.onchange = function () {
+        populatePICDropdown(this.value);
+    };
+
+    document.getElementById('proker-tanggal').valueAsDate = new Date();
+    document.getElementById('proker-proposal').checked = false;
+    document.getElementById('proker-rak').checked = false;
+    document.getElementById('proker-rab').checked = false;
+    document.getElementById('proker-lpj').checked = false;
+    // Selesai checkbox removed
+
+    // Clear rapat forms
+    const rapatContainer = document.getElementById('rapat-forms-container');
+    if (rapatContainer) {
+        rapatContainer.innerHTML = '';
+    }
+    rapatFormCounter = 0;
+
+    document.getElementById('proker-modal').classList.add('show');
+}
+
+async function editProker(id) {
+    if (currentMode !== 'sc') {
+        showToast('Mode SC diperlukan untuk mengubah data', 'error');
+        return;
+    }
+
+    if (!currentUser) {
+        showToast('Silakan login ke Mode SC terlebih dahulu', 'error');
+        return;
+    }
+
+    const proker = prokerData.find(p => p.id === id);
+    if (!proker) return;
+
+    // Load detail proker untuk mendapatkan data rapat
+    showLoading();
+    try {
+        const response = await fetch(`${APPS_SCRIPT_URL}?action=getProkerDetail&id=${encodeURIComponent(id)}`);
+        const result = await response.json();
+
+        if (result.success) {
+            const detail = result.data;
+            const prokerData = detail.proker;
+            const rapatData = detail.rapat || [];
+
+            document.getElementById('modal-title').textContent = 'Edit Proker';
+            document.getElementById('proker-id').value = prokerData.id;
+            document.getElementById('proker-nama').value = prokerData.nama || '';
+            document.getElementById('proker-divisi-id').value = prokerData.divisiId || '';
+
+            // Populate PIC dropdown filtered by saved division
+            populatePICDropdown(prokerData.divisiId);
+            document.getElementById('proker-pic-id').value = prokerData.picId || '';
+
+            // Add onchange handler
+            document.getElementById('proker-divisi-id').onchange = function () {
+                populatePICDropdown(this.value);
+            };
+
+            // Convert DD/MM/YYYY ke YYYY-MM-DD untuk input date
+            const tanggalInput = convertDateForInput(prokerData.tanggal || '');
+            document.getElementById('proker-tanggal').value = tanggalInput;
+
+            document.getElementById('proker-proposal').checked = prokerData.proposal || false;
+            document.getElementById('proker-rak').checked = prokerData.rak || false;
+            document.getElementById('proker-rab').checked = prokerData.rab || false;
+            document.getElementById('proker-lpj').checked = prokerData.lpj || false;
+            // Selesai checkbox removed
+
+            // Load rapat forms - EXISTING CODE for rapat forms ...
+            const container = document.getElementById('rapat-forms-container');
+            container.innerHTML = '';
+            rapatFormCounter = 0;
+
+            rapatData.forEach(rapat => {
+                // ... existing rapat form creation code ...
+                const formId = 'rapat-form-' + rapatFormCounter++;
+                const rapatForm = document.createElement('div');
+                rapatForm.className = 'rapat-item-form';
+                rapatForm.id = formId;
+
+                const tanggalRapInput = convertDateForInput(rapat.tanggalRap || '');
+
+                rapatForm.innerHTML = `
+                    <div style="border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; background: var(--bg-color);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                            <strong>Rapat ${rapatFormCounter}</strong>
+                            <button type="button" class="btn btn-sm btn-danger" onclick="removeRapatForm('${formId}')">Hapus</button>
+                        </div>
+                        <div class="form-group">
+                            <label>Jenis Rapat</label>
+                            <select class="rapat-jenis-select" required>
+                                <option value="">Pilih Jenis Rapat</option>
+                                ${masterRapat.map(r => `<option value="${escapeHtml(r.jenisRapat)}" ${r.jenisRapat === rapat.jenisRapat ? 'selected' : ''}>${escapeHtml(r.jenisRapat)}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Tanggal Rapat</label>
+                            <input type="date" class="rapat-tanggal-input" value="${tanggalRapInput}" required>
+                        </div>
+
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            <em>PIC: ${escapeHtml(rapat.pic || '-')} | Email: ${escapeHtml(rapat.picEmail || '-')}</em>
+                        </p>
+                    </div>
+                `;
+
+                container.appendChild(rapatForm);
+            });
+
+            document.getElementById('proker-modal').classList.add('show');
+        }
+    } catch (error) {
+        showToast('Error loading proker detail: ' + error.message, 'error');
+        console.error('Error loading proker detail:', error);
+    } finally {
+        hideLoading();
+    }
+}
+
+// ... existing toggleProkerDetail ...
+
+function addBulkProkerForm() {
+    const container = document.getElementById('bulk-proker-forms-container');
+    const formId = 'bulk-proker-form-' + bulkProkerCounter++;
+
+    const div = document.createElement('div');
+    div.className = 'bulk-proker-item-form';
+    div.id = formId;
+    div.innerHTML = `
+        <div style="border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; background: var(--bg-color); position: relative; animation: fadeIn 0.3s ease;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <strong style="color: var(--primary-color);">Proker #${bulkProkerCounter}</strong>
+                <button type="button" class="btn btn-sm btn-danger" onclick="removeBulkProkerForm('${formId}')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Hapus Proker</button>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>Nama Proker</label>
+                    <input type="text" class="bulk-nama" placeholder="Masukkan nama proker" required>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>Tanggal Pelaksanaan</label>
+                    <input type="date" class="bulk-tanggal" required>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>Divisi</label>
+                    <select class="bulk-divisi">
+                        <option value="">Pilih Divisi</option>
+                        ${masterDivisi.map(d => `<option value="${d.divisiId}">${d.namaDivisi}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>PIC</label>
+                    <select class="bulk-pic">
+                        <option value="">Pilih Divisi Dulu</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Rapat Section for Bulk Proker -->
+            <div style="background: var(--bg-secondary); border-radius: 8px; padding: 1rem; border: 1px dashed var(--border-color);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h5 style="margin: 0; font-size: 0.9rem;">Data Rapat Proker #${bulkProkerCounter}</h5>
+                    <button type="button" class="btn btn-sm btn-success" onclick="addRapatToBulkItem('${formId}')" style="font-size: 0.7rem; padding: 0.25rem 0.6rem;">
+                        + Tambah Rapat
+                    </button>
+                </div>
+                <div class="bulk-rapat-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
+                    <!-- Rapat sub-forms go here -->
+                </div>
+            </div>
+        </div>
+    `;
+
+    container.appendChild(div);
+
+    // Add event listener for dynamic filtering
+    const divisiSelect = div.querySelector('.bulk-divisi');
+    const picSelect = div.querySelector('.bulk-pic');
+
+    divisiSelect.onchange = function () {
+        const divisionId = this.value;
+        picSelect.innerHTML = '<option value="">Pilih PIC</option>';
+
+        const filteredPICs = masterPIC.filter(p => p.divisiId === divisionId && p.namaPic && p.namaPic.trim() !== '');
+        filteredPICs.forEach(p => {
+            const option = document.createElement('option');
+            option.value = p.picId;
+            option.textContent = p.namaPic;
+            picSelect.appendChild(option);
+        });
+    };
+
+    // Smooth scroll to bottom
+    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+}
+
+// ... existing code ...
+
+async function saveProker(event) {
+    event.preventDefault();
+
+    if (currentMode !== 'sc') {
+        showToast('Mode SC diperlukan untuk mengubah data', 'error');
+        return;
+    }
+
+    if (!currentUser) {
+        showToast('Silakan login ke Mode SC terlebih dahulu', 'error');
+        return;
+    }
+
+    const id = document.getElementById('proker-id').value;
+
+    const nama = document.getElementById('proker-nama').value;
+    const tanggal = document.getElementById('proker-tanggal').value;
+    const divisiId = document.getElementById('proker-divisi-id').value;
+    const picId = document.getElementById('proker-pic-id').value;
+
+    if (!nama || !tanggal || !divisiId || !picId) {
+        showToast('Mohon lengkapi Nama, Tanggal, Divisi, dan PIC', 'error');
+        return;
+    }
+
+    // Collect rapat data
+    const rapatList = [];
+    const rapatItems = document.querySelectorAll('#rapat-forms-container .rapat-item-form');
+    // picId already declared above using basic declaration, just use it
+    // const picId = document.getElementById('proker-pic-id').value; 
+
+    // Get PIC data dari masterPIC
+    const selectedPIC = masterPIC.find(p => p.picId === picId);
+    if (!selectedPIC && picId) {
+        console.warn('PIC not found in master data:', picId);
+    }
+    const picName = selectedPIC ? selectedPIC.namaPic : '';
+    const picEmail = selectedPIC ? selectedPIC.email : '';
+
+    rapatItems.forEach(item => {
+        const selectEl = item.querySelector('.rapat-jenis-select');
+        const dateEl = item.querySelector('.rapat-tanggal-input');
+
+        if (selectEl && dateEl) {
+            const jenisRapat = selectEl.value;
+            const tanggalRap = dateEl.value;
+
+            if (jenisRapat && tanggalRap) {
+                rapatList.push({
+                    jenisRapat: jenisRapat,
+                    tanggalRap: tanggalRap,
+                    pic: picName,
+                    picEmail: picEmail,
+                    statusRapat: false,
+                    aktif: true
+                });
+            }
+        }
+    });
+
+    const proposal = document.getElementById('proker-proposal').checked;
+    const rak = document.getElementById('proker-rak').checked;
+    const rab = document.getElementById('proker-rab').checked;
+    const lpj = document.getElementById('proker-lpj').checked;
+
+    // Auto-calculate finished status
+    const statusSelesai = proposal && rak && rab && lpj;
+
+    const proker = {
+        nama: document.getElementById('proker-nama').value,
+        divisiId: document.getElementById('proker-divisi-id').value || '',
+        picId: document.getElementById('proker-pic-id').value || '',
+        tanggal: document.getElementById('proker-tanggal').value,
+        proposal: proposal,
+        rak: rak,
+        rab: rab,
+        lpj: lpj,
+        statusSelesai: statusSelesai, // Calculated
+        rapat: rapatList
+    };
+
+    // Tambah info user untuk history
+    proker.username = currentUser.username;
+    proker.scId = currentUser.scId;
+    proker.scNama = currentUser.nama;
+
+    // ... existing save/fetch logic ...
+    showLoading();
+    try {
+        const action = id ? 'updateProker' : 'createProker';
+
+        const params = new URLSearchParams();
+        params.append('action', action);
+        if (id) {
+            params.append('id', id);
+        }
+
+        const url = `${APPS_SCRIPT_URL}?${params.toString()}`;
+
+        const response = await fetch(url, {
+            method: 'POST',
+            body: JSON.stringify(proker)
+        });
+
+        let result = { success: true };
+        try {
+            const text = await response.text();
+            if (text) {
+                result = JSON.parse(text);
+            }
+        } catch (e) {
+            console.warn('Could not parse response but request might have succeeded', e);
+        }
+
+        if (result.success) {
+            showToast(id ? 'Proker berhasil diperbarui!' : 'Proker berhasil ditambahkan!', 'success');
+            closeProkerModal();
+
+            if (id) {
+                const index = prokerData.findIndex(p => p.id === id);
+                if (index !== -1) {
+                    prokerData[index] = { ...prokerData[index], ...proker, id: id };
+                    localStorage.setItem('prokerDataCache', JSON.stringify(prokerData.map(p => ({ ...p, dateObj: null }))));
+                    applyFilters();
+                    renderProkerView();
+                }
+            } else {
+                loadProkerData(true);
+            }
+        } else {
+            showToast('Gagal menyimpan: ' + (result.message || 'Unknown error'), 'error');
+        }
+    } catch (error) {
+        console.error('Error saving proker:', error);
+        showToast('Error: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+function updateProkerCheckbox(id, field, value) {
+    if (currentMode !== 'sc') {
+        showToast('Mode SC diperlukan untuk mengubah data', 'error');
+        loadProkerData(false);
+        return;
+    }
+
+    if (!pendingChanges[id]) {
+        pendingChanges[id] = {};
+    }
+    pendingChanges[id][field] = value;
+
+    // Update data lokal agar UI berubah seketika
+    const index = prokerData.findIndex(p => p.id === id);
+    if (index !== -1) {
+        prokerData[index][field] = value;
+
+        // Auto-calculate statusSelesai based on all checkboxes
+        // We use the pending changes if available, else current data
+        const p = prokerData[index];
+        // Note: 'value' is already set in p[field] above.
+        // But for other fields, we should check pendingChanges first? 
+        // Simpler: assume prokerData is the source of truth for current UI state since we just updated it.
+        const isFinished = p.proposal && p.rak && p.rab && p.lpj;
+
+        if (p.statusSelesai !== isFinished) {
+            p.statusSelesai = isFinished;
+            pendingChanges[id]['statusSelesai'] = isFinished; // Add to batch
+
+            // Visual Update for Status Badge
+            const items = document.querySelectorAll(`[data-proker-id="${id}"]`);
+            items.forEach(item => {
+                if (isFinished) {
+                    item.classList.add('status-success');
+                    // Find or add badge
+                    const meta = item.querySelector('.month-item-meta');
+                    if (meta && !meta.querySelector('.status-completed')) {
+                        const badge = document.createElement('span');
+                        badge.className = 'status-badge status-completed';
+                        badge.textContent = 'Selesai';
+                        meta.insertBefore(badge, meta.firstChild);
+                    }
+                } else {
+                    item.classList.remove('status-success');
+                    const badge = item.querySelector('.status-completed');
+                    if (badge) badge.remove();
+                }
+            });
+        }
+    }
+
+    // Update batch save UI
+    updateBatchSaveUI();
+}
+
 
 // ==================== DARK MODE ====================
 
@@ -767,10 +1218,6 @@ function renderProkerMonthly() {
                                             <input type="checkbox" ${proker.lpj ? 'checked' : ''} onchange="updateProkerCheckbox('${proker.id}', 'lpj', this.checked)">
                                             <span>LPJ</span>
                                         </label>
-                                        <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; cursor: pointer;">
-                                            <input type="checkbox" ${proker.statusSelesai ? 'checked' : ''} onchange="updateProkerCheckbox('${proker.id}', 'statusSelesai', this.checked)">
-                                            <span>Selesai</span>
-                                        </label>
                                     </div>
                                 ` : ''}
                                 ${canEdit ? `
@@ -818,7 +1265,7 @@ function renderProkerTable() {
                     <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
                         <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; cursor: pointer;">
                             <input type="checkbox" ${proker.proposal ? 'checked' : ''} onchange="updateProkerCheckbox('${proker.id}', 'proposal', this.checked)">
-                            <span>P</span>
+                            <span>Proposal</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; cursor: pointer;">
                             <input type="checkbox" ${proker.rak ? 'checked' : ''} onchange="updateProkerCheckbox('${proker.id}', 'rak', this.checked)">
@@ -831,10 +1278,6 @@ function renderProkerTable() {
                         <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; cursor: pointer;">
                             <input type="checkbox" ${proker.lpj ? 'checked' : ''} onchange="updateProkerCheckbox('${proker.id}', 'lpj', this.checked)">
                             <span>LPJ</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; cursor: pointer;">
-                            <input type="checkbox" ${proker.statusSelesai ? 'checked' : ''} onchange="updateProkerCheckbox('${proker.id}', 'statusSelesai', this.checked)">
-                            <span>Selesai</span>
                         </label>
                     </div>
                 </td>
@@ -1057,141 +1500,9 @@ function searchProker() {
     debouncedSearchProker();
 }
 
-async function showAddProkerModal() {
-    if (currentMode !== 'sc') {
-        showToast('Mode SC diperlukan untuk menambahkan data', 'error');
-        return;
-    }
 
-    if (!currentUser) {
-        showToast('Silakan login ke Mode SC terlebih dahulu', 'error');
-        return;
-    }
 
-    // Pastikan master data sudah di-load
-    if (!masterRapat || masterRapat.length === 0) {
-        showLoading();
-        try {
-            await loadMasterData();
-        } catch (error) {
-            console.error('Error loading master data:', error);
-        } finally {
-            hideLoading();
-        }
-    }
 
-    document.getElementById('modal-title').textContent = 'Tambah Proker Baru';
-    document.getElementById('proker-form').reset();
-    document.getElementById('proker-id').value = '';
-    document.getElementById('proker-divisi-id').value = '';
-    document.getElementById('proker-pic-id').value = '';
-    document.getElementById('proker-tanggal').valueAsDate = new Date();
-    document.getElementById('proker-proposal').checked = false;
-    document.getElementById('proker-rak').checked = false;
-    document.getElementById('proker-rab').checked = false;
-    document.getElementById('proker-lpj').checked = false;
-    document.getElementById('proker-status-selesai').checked = false;
-
-    // Clear rapat forms
-    const rapatContainer = document.getElementById('rapat-forms-container');
-    if (rapatContainer) {
-        rapatContainer.innerHTML = '';
-    }
-    rapatFormCounter = 0;
-
-    document.getElementById('proker-modal').classList.add('show');
-}
-
-async function editProker(id) {
-    if (currentMode !== 'sc') {
-        showToast('Mode SC diperlukan untuk mengubah data', 'error');
-        return;
-    }
-
-    if (!currentUser) {
-        showToast('Silakan login ke Mode SC terlebih dahulu', 'error');
-        return;
-    }
-
-    const proker = prokerData.find(p => p.id === id);
-    if (!proker) return;
-
-    // Load detail proker untuk mendapatkan data rapat
-    showLoading();
-    try {
-        const response = await fetch(`${APPS_SCRIPT_URL}?action=getProkerDetail&id=${encodeURIComponent(id)}`);
-        const result = await response.json();
-
-        if (result.success) {
-            const detail = result.data;
-            const prokerData = detail.proker;
-            const rapatData = detail.rapat || [];
-
-            document.getElementById('modal-title').textContent = 'Edit Proker';
-            document.getElementById('proker-id').value = prokerData.id;
-            document.getElementById('proker-nama').value = prokerData.nama || '';
-            document.getElementById('proker-divisi-id').value = prokerData.divisiId || '';
-            document.getElementById('proker-pic-id').value = prokerData.picId || '';
-
-            // Convert DD/MM/YYYY ke YYYY-MM-DD untuk input date
-            const tanggalInput = convertDateForInput(prokerData.tanggal || '');
-            document.getElementById('proker-tanggal').value = tanggalInput;
-
-            document.getElementById('proker-proposal').checked = prokerData.proposal || false;
-            document.getElementById('proker-rak').checked = prokerData.rak || false;
-            document.getElementById('proker-rab').checked = prokerData.rab || false;
-            document.getElementById('proker-lpj').checked = prokerData.lpj || false;
-            document.getElementById('proker-status-selesai').checked = prokerData.statusSelesai || false;
-
-            // Load rapat forms
-            const container = document.getElementById('rapat-forms-container');
-            container.innerHTML = '';
-            rapatFormCounter = 0;
-
-            rapatData.forEach(rapat => {
-                const formId = 'rapat-form-' + rapatFormCounter++;
-                const rapatForm = document.createElement('div');
-                rapatForm.className = 'rapat-item-form';
-                rapatForm.id = formId;
-
-                const tanggalRapInput = convertDateForInput(rapat.tanggalRap || '');
-
-                rapatForm.innerHTML = `
-                    <div style="border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; background: var(--bg-color);">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-                            <strong>Rapat ${rapatFormCounter}</strong>
-                            <button type="button" class="btn btn-sm btn-danger" onclick="removeRapatForm('${formId}')">Hapus</button>
-                        </div>
-                        <div class="form-group">
-                            <label>Jenis Rapat *</label>
-                            <select class="rapat-jenis-select" required>
-                                <option value="">Pilih Jenis Rapat</option>
-                                ${masterRapat.map(r => `<option value="${escapeHtml(r.jenisRapat)}" ${r.jenisRapat === rapat.jenisRapat ? 'selected' : ''}>${escapeHtml(r.jenisRapat)}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Tanggal Rapat *</label>
-                            <input type="date" class="rapat-tanggal-input" value="${tanggalRapInput}" required>
-                        </div>
-
-                        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
-                            <em>PIC: ${escapeHtml(rapat.pic || '-')} | Email: ${escapeHtml(rapat.picEmail || '-')}</em>
-                        </p>
-                    </div>
-                `;
-
-                container.appendChild(rapatForm);
-            });
-
-            document.getElementById('proker-modal').classList.add('show');
-        }
-    } catch (error) {
-        showToast('Error loading proker detail: ' + error.message, 'error');
-        console.error('Error loading proker detail:', error);
-    } finally {
-        hideLoading();
-    }
-}
 
 // Toggle detail proker (expandable, bukan modal)
 function toggleProkerDetail(id) {
@@ -1481,7 +1792,7 @@ function closeProkerModal() {
     rapatFormCounter = 0;
 }
 
-let bulkProkerCounter = 0;
+
 
 function showBulkProkerModal() {
     if (currentMode !== 'sc') {
@@ -1503,64 +1814,7 @@ function closeBulkProkerModal() {
     document.getElementById('bulk-proker-modal').classList.remove('show');
 }
 
-function addBulkProkerForm() {
-    const container = document.getElementById('bulk-proker-forms-container');
-    const formId = 'bulk-proker-form-' + bulkProkerCounter++;
 
-    const div = document.createElement('div');
-    div.className = 'bulk-proker-item-form';
-    div.id = formId;
-    div.innerHTML = `
-        <div style="border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; background: var(--bg-color); position: relative; animation: fadeIn 0.3s ease;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <strong style="color: var(--primary-color);">Proker #${bulkProkerCounter}</strong>
-                <button type="button" class="btn btn-sm btn-danger" onclick="removeBulkProkerForm('${formId}')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Hapus Proker</button>
-            </div>
-            
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label>Nama Proker *</label>
-                    <input type="text" class="bulk-nama" placeholder="Masukkan nama proker" required>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label>Tanggal Pelaksanaan *</label>
-                    <input type="date" class="bulk-tanggal" required>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label>Divisi</label>
-                    <select class="bulk-divisi">
-                        <option value="">Pilih Divisi</option>
-                        ${masterDivisi.map(d => `<option value="${d.divisiId}">${d.namaDivisi}</option>`).join('')}
-                    </select>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label>PIC</label>
-                    <select class="bulk-pic">
-                        <option value="">Pilih PIC</option>
-                        ${masterPIC.map(p => `<option value="${p.picId}">${p.namaPic}</option>`).join('')}
-                    </select>
-                </div>
-            </div>
-
-            <!-- Rapat Section for Bulk Proker -->
-            <div style="background: var(--bg-secondary); border-radius: 8px; padding: 1rem; border: 1px dashed var(--border-color);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                    <h5 style="margin: 0; font-size: 0.9rem;">Data Rapat Proker #${bulkProkerCounter}</h5>
-                    <button type="button" class="btn btn-sm btn-success" onclick="addRapatToBulkItem('${formId}')" style="font-size: 0.7rem; padding: 0.25rem 0.6rem;">
-                        + Tambah Rapat
-                    </button>
-                </div>
-                <div class="bulk-rapat-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
-                    <!-- Rapat sub-forms go here -->
-                </div>
-            </div>
-        </div>
-    `;
-
-    container.appendChild(div);
-    // Smooth scroll to bottom
-    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
-}
 
 function removeBulkProkerForm(formId) {
     const el = document.getElementById(formId);
@@ -1615,12 +1869,12 @@ async function processBulkProker() {
         const divisiId = item.querySelector('.bulk-divisi').value;
         const picId = item.querySelector('.bulk-pic').value;
 
-        if (!nama || !tanggal) {
-            if (nama || tanggal) { // Only error if one is partially filled
-                showToast(`Mohon lengkapi Nama dan Tanggal untuk Proker #${index + 1}`, 'error');
+        if (!nama || !tanggal || !divisiId || !picId) {
+            if (nama || tanggal || divisiId || picId) { // Only error if one is partially filled
+                showToast(`Mohon lengkapi Nama, Tanggal, Divisi, dan PIC untuk Proker #${index + 1}`, 'error');
                 hasError = true;
             }
-            return; // Skip empty rows
+            return; // Skip empty rows (if completely empty, though logically above check catches partials)
         }
 
         // Collect Rapat for this proker
@@ -1701,7 +1955,7 @@ async function processBulkProker() {
     }
 }
 
-let rapatFormCounter = 0;
+
 
 function addRapatForm() {
     const container = document.getElementById('rapat-forms-container');
@@ -1739,14 +1993,14 @@ function addRapatForm() {
                 <button type="button" class="btn btn-sm btn-danger" onclick="removeRapatForm('${formId}')">Hapus</button>
             </div>
             <div class="form-group">
-                <label>Jenis Rapat *</label>
+                <label>Jenis Rapat</label>
                 <select class="rapat-jenis-select" required>
                     <option value="">Pilih Jenis Rapat</option>
                     ${masterRapat.map(r => `<option value="${escapeHtml(r.jenisRapat)}">${escapeHtml(r.jenisRapat)}</option>`).join('')}
                 </select>
             </div>
             <div class="form-group">
-                <label>Tanggal Rapat *</label>
+                <label>Tanggal Rapat</label>
                 <input type="date" class="rapat-tanggal-input" required>
             </div>
 
@@ -1766,193 +2020,7 @@ function removeRapatForm(formId) {
     }
 }
 
-async function saveProker(event) {
-    event.preventDefault();
 
-    if (currentMode !== 'sc') {
-        showToast('Mode SC diperlukan untuk mengubah data', 'error');
-        return;
-    }
-
-    if (!currentUser) {
-        showToast('Silakan login ke Mode SC terlebih dahulu', 'error');
-        return;
-    }
-
-    const id = document.getElementById('proker-id').value;
-
-    // Collect rapat data (hanya jenis rapat dan tanggal, PIC dan email akan diambil otomatis dari Master_PIC)
-    const rapatList = [];
-    const rapatItems = document.querySelectorAll('#rapat-forms-container .rapat-item-form');
-    const picId = document.getElementById('proker-pic-id').value;
-
-    // Get PIC data dari masterPIC
-    const selectedPIC = masterPIC.find(p => p.picId === picId);
-    if (!selectedPIC && picId) {
-        console.warn('PIC not found in master data:', picId);
-    }
-    const picName = selectedPIC ? selectedPIC.namaPic : '';
-    const picEmail = selectedPIC ? selectedPIC.email : '';
-
-    rapatItems.forEach(item => {
-        const selectEl = item.querySelector('.rapat-jenis-select');
-        const dateEl = item.querySelector('.rapat-tanggal-input');
-
-        if (selectEl && dateEl) {
-            const jenisRapat = selectEl.value;
-            const tanggalRap = dateEl.value;
-
-            if (jenisRapat && tanggalRap) {
-                rapatList.push({
-                    jenisRapat: jenisRapat,
-                    tanggalRap: tanggalRap,
-                    pic: picName, // Otomatis dari Master_PIC
-                    picEmail: picEmail, // Otomatis dari Master_PIC
-                    statusRapat: false, // Internal backend default
-                    aktif: true
-                });
-            }
-        }
-    });
-
-    const proker = {
-        nama: document.getElementById('proker-nama').value,
-        divisiId: document.getElementById('proker-divisi-id').value || '',
-        picId: document.getElementById('proker-pic-id').value || '',
-        tanggal: document.getElementById('proker-tanggal').value,
-        proposal: document.getElementById('proker-proposal').checked,
-        rak: document.getElementById('proker-rak').checked,
-        rab: document.getElementById('proker-rab').checked,
-        lpj: document.getElementById('proker-lpj').checked,
-        statusSelesai: document.getElementById('proker-status-selesai').checked,
-        rapat: rapatList
-    };
-
-    // Tambah info user untuk history (JANGAN overwrite proker.nama!)
-    proker.username = currentUser.username;
-    proker.scId = currentUser.scId;
-    proker.scNama = currentUser.nama; // Gunakan scNama untuk nama SC, bukan overwrite proker.nama
-
-    showLoading();
-    try {
-        const action = id ? 'updateProker' : 'createProker';
-
-        // Gunakan URLSearchParams untuk query string
-        const params = new URLSearchParams();
-        params.append('action', action);
-        if (id) {
-            params.append('id', id);
-        }
-
-        const url = `${APPS_SCRIPT_URL}?${params.toString()}`;
-
-        // Untuk Google Apps Script, gunakan mode 'no-cors' atau tanpa custom headers
-        // karena Apps Script Web App sudah handle CORS otomatis
-        const response = await fetch(url, {
-            method: 'POST',
-            body: JSON.stringify(proker)
-        });
-
-        // GAS returns opaque response sometimes, but often it works if parsed as JSON
-        let result = { success: true };
-        try {
-            const text = await response.text();
-            if (text) {
-                result = JSON.parse(text);
-            }
-        } catch (e) {
-            console.warn('Could not parse response but request might have succeeded', e);
-        }
-
-        if (result.success) {
-            showToast(id ? 'Proker berhasil diperbarui!' : 'Proker berhasil ditambahkan!', 'success');
-            closeProkerModal();
-
-            if (id) {
-                const index = prokerData.findIndex(p => p.id === id);
-                if (index !== -1) {
-                    prokerData[index] = { ...prokerData[index], ...proker, id: id };
-                    localStorage.setItem('prokerDataCache', JSON.stringify(prokerData.map(p => ({ ...p, dateObj: null }))));
-                    applyFilters();
-                    renderProkerView();
-                }
-            } else {
-                // For new proker, reload data immediately and force bypass cache
-                loadProkerData(true);
-            }
-        } else {
-            showToast('Gagal menyimpan: ' + (result.message || 'Unknown error'), 'error');
-        }
-    } catch (error) {
-        console.error('Error saving proker:', error);
-        showToast('Error: ' + error.message + '. Pastikan Apps Script sudah di-deploy dan URL benar. Cek browser console untuk detail.', 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-// Update checkbox langsung dengan sistem batch
-function updateProkerCheckbox(prokerId, field, value) {
-    if (currentMode !== 'sc') {
-        showToast('Mode SC diperlukan untuk mengubah data', 'error');
-        return;
-    }
-
-    if (!currentUser) {
-        showToast('Silakan login ke Mode SC terlebih dahulu', 'error');
-        return;
-    }
-
-    // Initialize entry if not exists
-    if (!pendingChanges[prokerId]) {
-        pendingChanges[prokerId] = {};
-    }
-
-    // Update pending changes
-    pendingChanges[prokerId][field] = value;
-
-    // Update data lokal agar UI berubah seketika
-    const index = prokerData.findIndex(p => p.id === prokerId);
-    if (index !== -1) {
-        prokerData[index][field] = value;
-
-        // OPTIMIZATION: Update DOM directly without full re-render
-        const items = document.querySelectorAll(`[data-proker-id="${prokerId}"]`);
-        items.forEach(item => {
-            if (field === 'statusSelesai') {
-                if (value) item.classList.add('status-success');
-                else item.classList.remove('status-success');
-
-                // Update badge in monthly view if exists
-                const meta = item.querySelector('.month-item-meta');
-                if (meta) {
-                    const existingBadge = meta.querySelector('.status-badge');
-                    if (value && !existingBadge) {
-                        const badge = document.createElement('span');
-                        badge.className = 'status-badge status-completed';
-                        badge.textContent = 'Selesai';
-                        meta.insertBefore(badge, meta.firstChild);
-                    } else if (!value && existingBadge) {
-                        existingBadge.remove();
-                    }
-                }
-
-                // Update badge in table view if exists
-                if (item.tagName === 'TR') {
-                    const statusTd = item.cells[item.cells.length - 2];
-                    if (statusTd && !currentMode === 'sc') { // only for staff view but we are in sc mode
-                        // in sc mode table, the status is checkboxes
-                    }
-                }
-            }
-
-            // For other checkboxes, they are already checked in the DOM because the user clicked them
-            // No further DOM update needed for the one the user just clicked.
-        });
-    }
-
-    updateBatchUI();
-}
 
 function updateBatchUI() {
     const container = document.getElementById('batch-save-container');
@@ -2622,22 +2690,7 @@ window.onclick = function (event) {
 
 // ==================== BATCH UPDATES (CHECKBOXES) ====================
 
-function updateProkerCheckbox(id, field, value) {
-    if (currentMode !== 'sc') {
-        showToast('Mode SC diperlukan untuk mengubah data', 'error');
-        // Revert checkbox state
-        loadProkerData(false);
-        return;
-    }
 
-    if (!pendingChanges[id]) {
-        pendingChanges[id] = {};
-    }
-    pendingChanges[id][field] = value;
-
-    // Update batch save UI
-    updateBatchSaveUI();
-}
 
 function updateBatchSaveUI() {
     const container = document.getElementById('batch-save-container');

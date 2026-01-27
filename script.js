@@ -942,7 +942,7 @@ function updateModeDisplay() {
             welcomeTitle.textContent = 'Selamat datang di HIMAGRO HUB';
         }
         if (welcomeSubtitle) {
-            welcomeSubtitle.textContent = 'Dashboard monitoring Program Kerja dan Konten Media Sosial HIMAGRO';
+            welcomeSubtitle.textContent = 'Dashboard Monitoring Program Kerja dan Konten Media Sosial HIMAGRO';
         }
 
         indicator.style.display = 'none';

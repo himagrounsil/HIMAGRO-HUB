@@ -1,15 +1,15 @@
-const CACHE_NAME = 'himagro-hub-v1';
+const CACHE_NAME = 'himagro-hub-v2';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
     './styles.css',
     './script.js',
+    './manifest.json',
     './Logo/Himagro.png',
     './Logo/Unsil.png',
     './Logo/Kabinet.png',
     './Logo/BluSpeed.png',
-    './Logo/Berdampak.png',
-    'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'
+    './Logo/Berdampak.png'
 ];
 
 // Install Event - Cache Assets

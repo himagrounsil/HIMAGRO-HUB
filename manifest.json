@@ -8,14 +8,16 @@
   "description": "Sistem manajemen data Program Kerja dan Konten Kominfo HIMAGRO",
   "icons": [
     {
-      "src": "Logo/Himagro.png",
+      "src": "./Logo/Himagro.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "Logo/Himagro.png",
+      "src": "./Logo/Himagro.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }

@@ -3,7 +3,8 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
     <meta name="description"
         content="HIMAGRO Hub - Sistem manajemen data Program Kerja dan Konten Kominfo untuk Himpunan Mahasiswa Agroteknologi">
     <meta name="theme-color" content="#16a34a">
@@ -52,13 +53,17 @@
                         <ul id="sc-active-names" class="sc-active-names"></ul>
                     </div>
                 </div>
-                <button class="icon-btn" onclick="toggleDarkMode()" title="Switch to Light Mode">
-                    <span id="dark-mode-icon">☀️</span>
+
+                <button id="install-btn" class="icon-btn" style="display: none;" title="Instal Aplikasi">
+                    <span>📲</span>
+                </button>
+                <button class="icon-btn" onclick="showHelpModal()" title="Panduan Penggunaan">
+                    <span>❓</span>
                 </button>
                 <button class="icon-btn" onclick="refreshData()" title="Refresh Data">
                     <span>🔄</span>
                 </button>
-                <button class="icon-btn" onclick="clearCache()" title="Clear Cache">
+                <button class="icon-btn" onclick="clearCache()" title="Reset Aplikasi (Clear Cache)">
                     <span>🗑️</span>
                 </button>
                 <div class="mode-switcher">
@@ -85,6 +90,9 @@
             <button class="tab-btn active" onclick="switchSection('proker')" id="tab-proker">
                 📊 Program Kerja
             </button>
+            <button class="tab-btn" onclick="switchSection('pengurus')" id="tab-pengurus">
+                🗓️ Kalender Pengurus
+            </button>
             <button class="tab-btn" onclick="switchSection('konten')" id="tab-konten">
                 📰 Konten Media Sosial
             </button>
@@ -101,9 +109,6 @@
                         </button>
                         <button class="view-btn" data-view="all" onclick="setProkerView('all')">
                             <span>📋</span> Semua
-                        </button>
-                        <button class="view-btn" data-view="calendar" onclick="setProkerView('calendar')">
-                            <span>🗓️</span> Kalender
                         </button>
                     </div>
                     <button class="btn btn-primary" onclick="showAddProkerModal()" id="add-proker-btn"
@@ -174,14 +179,24 @@
                 </div>
             </div>
 
-            <!-- Calendar View -->
-            <div id="proker-calendar-view" class="data-view" style="display: none;">
+
+        </section>
+
+        <!-- Kalender Pengurus Section -->
+        <section class="section" id="pengurus-section" style="display: none;">
+            <div class="section-header">
+                <h2>Kalender Pengurus</h2>
+                <p style="color: var(--text-secondary); font-size: 0.9rem;">Menampilkan Program Kerja dan Rapat Pengurus
+                </p>
+            </div>
+
+            <div id="pengurus-calendar-view" class="data-view">
                 <div class="calendar-controls">
-                    <button class="icon-btn" onclick="changeCalendarMonth(-1)">◀</button>
-                    <h3 id="calendar-month-year"></h3>
-                    <button class="icon-btn" onclick="changeCalendarMonth(1)">▶</button>
+                    <button class="icon-btn" onclick="changePengurusCalendarMonth(-1)">◀</button>
+                    <h3 id="pengurus-calendar-month-year"></h3>
+                    <button class="icon-btn" onclick="changePengurusCalendarMonth(1)">▶</button>
                 </div>
-                <div id="calendar-container"></div>
+                <div id="pengurus-calendar-container"></div>
             </div>
         </section>
 
@@ -463,9 +478,16 @@
         </div>
     </div>
 
-    <!-- Loading Overlay -->
+    <!-- Loading Overlay / Welcome Screen -->
     <div id="loading-overlay" class="loading-overlay">
-        <div class="spinner"></div>
+        <div class="loading-content">
+            <div id="welcome-logo-container" class="welcome-logo-container">
+                <img src="Logo/Himagro.png" alt="Himagro Logo" class="welcome-logo">
+            </div>
+            <h2 id="welcome-title" class="welcome-title">Selamat Datang di HIMAGRO HUB</h2>
+            <div class="spinner"></div>
+            <p id="loading-text" class="loading-text">Sedang memuat data...</p>
+        </div>
     </div>
 
     <!-- Notification Toast -->
@@ -509,6 +531,234 @@
             <div class="batch-save-actions">
                 <button class="btn btn-secondary btn-sm" onclick="discardBatchChanges()">Batal</button>
                 <button class="btn btn-primary btn-sm" onclick="saveBatchChanges()">Simpan Perubahan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Admin Guide Button (Only for SC) -->
+    <button id="admin-guide-btn" class="floating-btn admin-guide-btn" onclick="showAdminGuide()" style="display: none;"
+        title="Panduan SC">
+        <span>📜</span> Panduan SC
+    </button>
+
+    <!-- Modal Panduan Admin (SC) -->
+    <div id="admin-guide-modal" class="modal">
+        <div class="modal-content" style="max-width: 900px; max-height: 90vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h3>📜 Panduan Teknis & Pengelolaan Steering Committee</h3>
+                <span class="close" onclick="closeAdminGuide()">&times;</span>
+            </div>
+            <div style="padding: 1.5rem; flex: 1; overflow-y: auto;">
+
+                <div class="admin-guide-tabs">
+                    <button class="ag-tab active" onclick="switchAGTab('ag-task')">✚ Tambah Task</button>
+                    <button class="ag-tab" onclick="switchAGTab('ag-edit')">✎ Edit & Admin</button>
+                    <button class="ag-tab" onclick="switchAGTab('ag-db')">📊 Database (Spreadsheet)</button>
+                    <button class="ag-tab" onclick="switchAGTab('ag-warn')">⚠️ Peringatan</button>
+                </div>
+
+                <div id="ag-task" class="ag-content">
+                    <h4>1. Menambahkan Program Kerja</h4>
+                    <p><strong>Secara Satuan:</strong> Klik tombol "Tambah Proker Baru" di section Program Kerja. Isi
+                        Nama (Wajib), Tanggal, Divisi, dan PIC. Anda juga bisa langsung menambahkan jadwal rapat di form
+                        tersebut.</p>
+                    <p><strong>Secara Massal (Bulk):</strong> Gunakan tombol "Tambah Massal". Fitur ini sangat berguna
+                        untuk input banyak proker sekaligus (misal: saat awal periode kabinet). Klik "Simpan Semua"
+                        setelah selesai mengisi semua baris.</p>
+                </div>
+
+                <div id="ag-edit" class="ag-content" style="display: none;">
+                    <h4>2. Mengedit & Administrasi</h4>
+                    <p><strong>Ceklis Administrasi:</strong> Anda bisa langsung mencentang kolom Proposal, RAK, RAB, dan
+                        LPJ di Tabel Utama. Perubahan ini akan memicu "Batch Save" (tombol biru di bawah) agar hemat
+                        kuota kiriman ke server.</p>
+                    <p><strong>Edit Keseluruhan:</strong> Klik tombol "Edit" di daftar proker. Di sini Anda bisa
+                        mengubah Nama, Divisi, hingga menambah/menghapus "Jadwal Rapat" yang spesifik untuk proker
+                        tersebut.</p>
+                </div>
+
+                <div id="ag-db" class="ag-content" style="display: none;">
+                    <h4>3. Struktur & Detail Database (Spreadsheet)</h4>
+                    <p
+                        style="font-size: 0.85rem; background: var(--bg-secondary); padding: 0.75rem; border-radius: 6px; border-left: 3px solid var(--accent-color); margin-bottom: 1.5rem;">
+                        Sistem ini menggunakan Google Sheets sebagai database. Berikut adalah rincian kolom dan cara
+                        pengisiannya agar tidak terjadi error:
+                    </p>
+
+                    <!-- Detail Sheet Proker -->
+                    <div
+                        style="margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
+                        <h5 style="color: var(--primary-color); margin-bottom: 0.5rem;">📁 Sheet: Proker (Data Utama)
+                        </h5>
+                        <ul style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.8;">
+                            <li><strong>ID:</strong> (Otomatis) ID unik bersifat permanen. Jangan diubah kecuali
+                                terpaksa.</li>
+                            <li><strong>nama:</strong> Judul kegiatan. <em>Contoh: Latihan Kepemimpinan Mahasiswa.</em>
+                            </li>
+                            <li><strong>divisiId:</strong> ID Divisi (harus ada di MasterDivisi). <em>Contoh: D01.</em>
+                            </li>
+                            <li><strong>picId:</strong> ID PIC (harus ada di MasterPIC). <em>Contoh: P01.</em></li>
+                            <li><strong>tanggal:</strong> Format YYYY-MM-DD. <em>Contoh: 2024-03-24.</em></li>
+                            <li><strong>proposal, rak, rab, lpj:</strong> Status centang. Isi <code>TRUE</code>
+                                (tercentang) atau <code>FALSE</code> (kosong).</li>
+                            <li><strong>statusSelesai:</strong> Akan otomatis <code>TRUE</code> jika 4 kolom admin di
+                                atas semuanya <code>TRUE</code>.</li>
+                        </ul>
+                    </div>
+
+                    <!-- Detail Sheet Rapat -->
+                    <div
+                        style="margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
+                        <h5 style="color: var(--primary-color); margin-bottom: 0.5rem;">📁 Sheet: rapat_proker (Jadwal
+                            Rapat)</h5>
+                        <ul style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.8;">
+                            <li><strong>idProker:</strong> Harus sama persis dengan ID di sheet Proker agar terhubung.
+                            </li>
+                            <li><strong>jenisRapat:</strong> Kategori rapat. <em>Contoh: Rapat Perdana / Rapat
+                                    Pleno.</em></li>
+                            <li><strong>tanggalRap:</strong> Tanggal rapat. Format DD/MM/YYYY. <em>Contoh:
+                                    20/03/2024.</em></li>
+                            <li><strong>pic / picEmail:</strong> Nama dan email yang akan muncul di notifikasi.</li>
+                        </ul>
+                    </div>
+
+                    <!-- Detail Sheet Master -->
+                    <div
+                        style="margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
+                        <h5 style="color: var(--primary-color); margin-bottom: 0.5rem;">📁 Sheet: MasterPIC,
+                            MasterDivisi, & MasterRapat</h5>
+                        <ul style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.8;">
+                            <li><strong>MasterPIC:</strong> Tambah Nama Pengurus agar muncul di pilihan PIC Web.
+                                <em>Contoh: P15 | Andi | D02 | andi@mail.com</em>.
+                            </li>
+                            <li><strong>MasterDivisi:</strong> Tambah nama departemen baru. <em>Contoh: D07 |
+                                    Pengembangan Bisnis</em>.</li>
+                            <li><strong>MasterRapat:</strong> Tambah kategori rapat baru agar muncul di dropdown.
+                                <em>Contoh: Rapat Koordinasi Wilayah</em>.
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Detail Sheet MasterSC -->
+                    <div
+                        style="margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
+                        <h5 style="color: #f59e0b; margin-bottom: 0.5rem;">🔐 Sheet: MasterSC (Data Login)</h5>
+                        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Sheet ini
+                            sangat rahasia. Digunakan untuk autentikasi login pengurus SC.</p>
+                        <ul style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.8;">
+                            <li><strong>username:</strong> Digunakan untuk login.</li>
+                            <li><strong>password:</strong> Kata sandi login.</li>
+                            <li><strong>nama:</strong> Nama pengurus yang akan muncul di sistem (Audit Trail).</li>
+                        </ul>
+                    </div>
+
+                    <div
+                        style="background: rgba(22, 163, 74, 0.1); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary-color); margin-top: 1.5rem;">
+                        <strong style="display: block; margin-bottom: 0.5rem;">⚖️ Aturan Pengeditan Langsung
+                            (Spreadsheet vs Web):</strong>
+                        <ul
+                            style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6; padding-left: 1.25rem;">
+                            <li><strong>Sangat Aman:</strong> Mengedit isi sel data (seperti typo nama, koreksi tanggal,
+                                atau ganti status centang) langsung di spreadsheet. Pastikan format tetap konsisten.
+                            </li>
+                            <li><strong>Gunakan Web:</strong> Untuk menambah Proker atau Rapat baru. Web menjamin ID
+                                tergenerasi otomatis secara unik agar data tidak tertukar.</li>
+                            <li><strong>Dilarang Keras:</strong> Mengubah Nama Judul Kolom (Baris 1),
+                                Menghapus/Menyisipkan Kolom tengah, atau Mengubah ID yang sudah ada karena akan merusak
+                                sinkronisasi antar sheet.</li>
+                        </ul>
+                    </div>
+
+                    <div style="text-align: center; margin-top: 2rem;">
+                        <a href="https://docs.google.com/spreadsheets/d/1q78bgXcbS1pHizgXnY43fJSezlZxwK3R73JAGP_05No/edit?usp=sharing"
+                            target="_blank" class="btn btn-primary" style="width: 100%; padding: 1rem;">
+                            <span>🔗</span> Buka Spreadsheet Database Utama
+                        </a>
+                    </div>
+                </div>
+
+                <div id="ag-warn" class="ag-content" style="display: none;">
+                    <h4>4. Peringatan Penting</h4>
+                    <div
+                        style="color: #ef4444; background: rgba(239, 68, 68, 0.1); padding: 1rem; border-radius: 8px; border: 1px solid #ef4444;">
+                        <p style="margin-bottom: 0.5rem;"><strong>🛑 Jangan Hapus Baris Secara Sembarangan:</strong>
+                            Menghapus baris di spreadsheet tanpa melalui Web dapat menyebabkan sinkronisasi ID
+                            bermasalah.</p>
+                        <p style="margin-bottom: 0.5rem;"><strong>🕒 Aktivitas Tercatat:</strong> Setiap perubahan
+                            (Create, Update, Delete) yang dilakukan di Mode SC akan mencatat Username dan Waktu di
+                            sistem sebagai bukti pertanggungjawaban.</p>
+                        <p><strong>💾 Selalu Backup:</strong> Sebelum melakukan perubahan besar di spreadsheet langsung,
+                            pastikan Anda mencadangkan file atau menduplikasi sheet tersebut.</p>
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-actions" style="justify-content: center; padding: 1rem 0;">
+                <button class="btn btn-secondary" onclick="closeAdminGuide()">Tutup Panduan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Panduan Penggunaan Umum -->
+    <div id="help-modal" class="modal">
+        <div class="modal-content" style="max-width: 700px; max-height: 85vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h3>📖 Panduan Penggunaan HIMAGRO HUB</h3>
+                <span class="close" onclick="closeHelpModal()">&times;</span>
+            </div>
+            <div style="padding: 1.5rem; flex: 1; overflow-y: auto;">
+
+                <div class="help-item" style="margin-bottom: 2rem;">
+                    <h4
+                        style="color: var(--primary-color); border-bottom: 2px solid var(--primary-color); padding-bottom: 0.5rem; margin-bottom: 1rem;">
+                        📍 Hak Akses & Navigasi
+                    </h4>
+                    <p style="font-size: 0.9rem; color: var(--text-primary); font-weight: 600; margin-bottom: 0.75rem;">
+                        Status: Pengguna Umum (Staff) - Hak Akses "Lihat Saja".
+                    </p>
+                    <ul
+                        style="font-size: 0.875rem; color: var(--text-secondary); line-height: 1.7; padding-left: 1.25rem;">
+                        <li><strong>Section Proker:</strong> Pantau progres administrasi (Proposal hingga LPJ) setiap
+                            kegiatan. Klik nama proker untuk rincian jadwal rapat.</li>
+                        <li><strong>Section Kalender Pengurus:</strong> Pantau agenda organisasi dan jadwal rapat rutin
+                            pengurus secara visual.</li>
+                        <li><strong>Section Konten:</strong> Pantau jadwal publikasi media sosial agar tidak terjadi
+                            bentrok informasi.</li>
+                    </ul>
+                </div>
+
+                <div class="help-item" style="margin-bottom: 2rem;">
+                    <h4
+                        style="color: var(--accent-color); border-bottom: 2px solid var(--accent-color); padding-bottom: 0.5rem; margin-bottom: 1rem;">
+                        🛠️ Fitur & Fungsi Tombol
+                    </h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+                        <div style="background: rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 8px;">
+                            <strong style="display: block; margin-bottom: 0.25rem;">🔄 Refresh Data:</strong>
+                            <span style="font-size: 0.85rem; color: var(--text-secondary);">Mengambil data terbaru dari
+                                server jika pengurus SC baru saja melakukan update.</span>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 8px;">
+                            <strong style="display: block; margin-bottom: 0.25rem;">🗑️ Reset Aplikasi:</strong>
+                            <span style="font-size: 0.85rem; color: var(--text-secondary);">Gunakan jika aplikasi terasa
+                                error atau data tidak mau muncul (Clear Cache).</span>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 8px;">
+                            <strong style="display: block; margin-bottom: 0.25rem;">🛡️ Mode SC (Admin):</strong>
+                            <span style="font-size: 0.85rem; color: var(--text-secondary);">Tombol login khusus pengurus
+                                untuk manajemen data kegiatan.</span>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 8px;">
+                            <strong style="display: block; margin-bottom: 0.25rem;">� Instal Aplikasi:</strong>
+                            <span style="font-size: 0.85rem; color: var(--text-secondary);">Klik tombol 📲 di atas (jika
+                                muncul) untuk menginstal web ini menjadi aplikasi HP agar lebih praktis.</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-actions" style="justify-content: center; padding: 1rem 0;">
+                <button class="btn btn-primary" onclick="closeHelpModal()">Saya Mengerti & Mulai</button>
             </div>
         </div>
     </div>

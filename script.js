@@ -25,6 +25,8 @@ let currentCalendarMonth = new Date().getMonth();
 let currentCalendarYear = new Date().getFullYear();
 let currentKontenCalendarMonth = new Date().getMonth();
 let currentKontenCalendarYear = new Date().getFullYear();
+let currentPengurusCalendarMonth = new Date().getMonth();
+let currentPengurusCalendarYear = new Date().getFullYear();
 let bulkProkerCounter = 0;
 let rapatFormCounter = 0;
 
@@ -115,13 +117,39 @@ function showCalendarDayDetails(dateString, type) {
     let items = [];
 
     if (type === 'proker') {
-        items = prokerData.filter(p => p.dateObj && isSameDay(p.dateObj, date) && p.isActive !== false);
+        items = prokerData.filter(p => p.dateObj && isSameDay(p.dateObj, date) && p.isActive !== false).map(p => ({
+            nama: p.nama,
+            meta: p.divisiId || '-'
+        }));
+    } else if (type === 'pengurus') {
+        prokerData.forEach(p => {
+            if (p.dateObj && isSameDay(p.dateObj, date) && p.isActive !== false) {
+                items.push({ nama: p.nama, meta: 'Program Kerja' });
+            }
+            if (p.rapat) {
+                p.rapat.forEach(r => {
+                    let rDate = null;
+                    if (r.tanggal) {
+                        const parts = r.tanggal.split('/');
+                        if (parts.length === 3) {
+                            rDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                        }
+                    }
+                    if (rDate && isSameDay(rDate, date)) {
+                        items.push({ nama: `${r.jenisRapat} (${p.nama || ''})`, meta: 'Rapat Pengurus' });
+                    }
+                });
+            }
+        });
     } else {
-        items = kontenData.filter(k => k.dateObj && isSameDay(k.dateObj, date));
+        items = kontenData.filter(k => k.dateObj && isSameDay(k.dateObj, date)).map(k => ({
+            nama: k.nama,
+            meta: k.status || '-'
+        }));
     }
 
     if (items.length === 0) {
-        listContainer.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-secondary);">Tidak ada ${type} pada tanggal ini</div>`;
+        listContainer.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-secondary);">Tidak ada agenda pada tanggal ini</div>`;
     } else {
         listContainer.innerHTML = `
             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
@@ -129,7 +157,7 @@ function showCalendarDayDetails(dateString, type) {
                     <div class="month-item" style="margin-bottom: 0; cursor: default; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-color);">
                         <div style="font-weight: 600; color: var(--text-primary);">${escapeHtml(item.nama)}</div>
                         <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">
-                            ${type === 'proker' ? (item.divisiId || '-') : (item.status || '-')}
+                            ${item.meta}
                         </div>
                     </div>
                 `).join('')}
@@ -146,18 +174,28 @@ function closeCalendarDayModal() {
 
 // Inisialisasi saat halaman dimuat
 document.addEventListener('DOMContentLoaded', async function () {
-    initDarkMode();
     updateModeDisplay();
 
     // Load hanya master data dan proker data saat pertama kali (lazy loading untuk konten)
+    showLoading('Sedang memuat data awal...');
     await Promise.all([
         loadMasterData(),
-        loadProkerData()
+        loadProkerData({ force: false, silent: true }) // Silent true because we show manual loading here
     ]);
+
+    // First time onboarding check
+    if (!localStorage.getItem('hasSeenHelp')) {
+        showHelpModal();
+        localStorage.setItem('hasSeenHelp', 'true');
+    }
 
     populateMonthFilters();
     switchSection('proker'); // Default show Proker
-    hideLoading(); // Pastikan loading di-hide setelah semua data loaded
+    hideLoading(); // Pastikan loading di-hide setelah semua data loaded 
+
+    // Aktifkan mode transisi normal setelah loading awal selesai
+    document.getElementById('welcome-logo-container').style.display = 'none';
+    document.getElementById('welcome-title').style.display = 'none';
 
     startGlobalSync(); // Start background sync for all users
 });
@@ -542,14 +580,13 @@ async function saveProker(event) {
     }
 
     const id = document.getElementById('proker-id').value;
-
-    const nama = document.getElementById('proker-nama').value;
+    const nama = document.getElementById('proker-nama').value.trim();
     const tanggal = document.getElementById('proker-tanggal').value;
     const divisiId = document.getElementById('proker-divisi-id').value;
     const picId = document.getElementById('proker-pic-id').value;
 
-    if (!nama || !tanggal || !divisiId || !picId) {
-        showToast('Mohon lengkapi Nama, Tanggal, Divisi, dan PIC', 'error');
+    if (!nama) {
+        showToast('Mohon isi minimal Nama Program Kerja', 'error');
         return;
     }
 
@@ -615,7 +652,7 @@ async function saveProker(event) {
     proker.scNama = currentUser.nama;
 
     // ... existing save/fetch logic ...
-    showLoading();
+    showLoading(id ? 'Sedang memperbarui proker...' : 'Sedang menyimpan proker baru...');
     try {
         const action = id ? 'updateProker' : 'createProker';
 
@@ -724,43 +761,12 @@ function updateProkerCheckbox(id, field, value) {
 }
 
 
-// ==================== DARK MODE ====================
 
-function initDarkMode() {
-    // Cek tema yang tersimpan, jika tidak ada (null/undefined) gunakan 'dark'
-    let savedTheme = localStorage.getItem('theme');
-    if (!savedTheme) {
-        savedTheme = 'dark';
-        localStorage.setItem('theme', 'dark');
-    }
-    document.documentElement.setAttribute('data-theme', savedTheme);
-    updateDarkModeDisplay(savedTheme);
-}
-
-function toggleDarkMode() {
-    const currentTheme = document.documentElement.getAttribute('data-theme');
-    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', newTheme);
-    localStorage.setItem('theme', newTheme);
-    updateDarkModeDisplay(newTheme);
-}
-
-function updateDarkModeDisplay(theme) {
-    const icon = document.getElementById('dark-mode-icon');
-    const btn = icon.parentElement;
-    if (theme === 'dark') {
-        icon.textContent = '☀️';
-        btn.title = 'Switch to Light Mode';
-    } else {
-        icon.textContent = '🌙';
-        btn.title = 'Switch to Dark Mode';
-    }
-}
 
 // ==================== REFRESH & CACHE ====================
 
 async function refreshData() {
-    showLoading();
+    showLoading('Sedang memperbarui data...');
 
     // Clear cache
     localStorage.removeItem('prokerDataCache');
@@ -774,11 +780,11 @@ async function refreshData() {
     scData = [];
 
     try {
-        // Reload semua data secara parallel
+        // Reload semua data secara parallel secara silent agar tidak menimpa pesan loading utama
         await Promise.all([
-            loadMasterData(),
-            loadProkerData(),
-            loadKontenData()
+            loadMasterData({ silent: true }),
+            loadProkerData({ force: true, silent: true }),
+            loadKontenData({ silent: true })
         ]);
         showToast('Data berhasil di-refresh!', 'success');
     } catch (error) {
@@ -789,14 +795,28 @@ async function refreshData() {
     }
 }
 
-function clearCache() {
+async function clearCache() {
+    const ok = await showConfirm('Tindakan ini akan menghapus semua data sementara dan mengeluarkan Anda dari Mode SC. Gunakan hanya jika aplikasi terasa bermasalah. Lanjutkan?', {
+        title: 'Reset Aplikasi',
+        okText: 'Ya, Reset'
+    });
+
+    if (!ok) return;
+
     localStorage.removeItem('prokerDataCache');
     localStorage.removeItem('prokerDataCache_time');
     localStorage.removeItem('kontenDataCache');
     localStorage.removeItem('kontenDataCache_time');
-    localStorage.removeItem('theme'); // Reset tema ke default (dark)
     sessionStorage.clear();
-    location.reload(); // Reload halaman untuk reset semua state termasuk tema
+    location.reload(); // Reload halaman untuk reset semua state
+}
+
+function showHelpModal() {
+    document.getElementById('help-modal').classList.add('show');
+}
+
+function closeHelpModal() {
+    document.getElementById('help-modal').classList.remove('show');
 }
 
 // ==================== MODE MANAGEMENT ====================
@@ -840,7 +860,7 @@ async function loginSC(event) {
         localStorage.removeItem('sc_creds');
     }
 
-    showLoading();
+    showLoading('Sedang memvalidasi akun...');
     try {
         const response = await fetch(`${APPS_SCRIPT_URL}?action=validateLogin&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`);
         const result = await response.json();
@@ -914,6 +934,14 @@ function updateModeDisplay() {
             kontenTab.style.pointerEvents = 'none';
             kontenTab.style.opacity = '0.5';
             kontenTab.style.cursor = 'not-allowed';
+            kontenTab.title = 'Tab ini tidak tersedia di Mode SC';
+        }
+        const pengurusTab = document.getElementById('tab-pengurus');
+        if (pengurusTab) {
+            pengurusTab.style.pointerEvents = 'none';
+            pengurusTab.style.opacity = '0.5';
+            pengurusTab.style.cursor = 'not-allowed';
+            pengurusTab.title = 'Tab ini tidak tersedia di Mode SC';
         }
         if (welcomeTitle && currentUser) {
             welcomeTitle.textContent = `Selamat datang ${currentUser.nama || currentUser.username} di Mode Steering Committee`;
@@ -924,6 +952,8 @@ function updateModeDisplay() {
 
         indicator.style.display = 'flex';
         bulkHeader.forEach(el => el.style.display = 'table-cell');
+        const guideBtn = document.getElementById('admin-guide-btn');
+        if (guideBtn) guideBtn.style.display = 'flex';
         startSCPolling();
     } else {
         modeBadge.textContent = 'Mode: Staff';
@@ -937,6 +967,14 @@ function updateModeDisplay() {
             kontenTab.style.pointerEvents = 'auto';
             kontenTab.style.opacity = '1';
             kontenTab.style.cursor = 'pointer';
+            kontenTab.title = '';
+        }
+        const pengurusTab = document.getElementById('tab-pengurus');
+        if (pengurusTab) {
+            pengurusTab.style.pointerEvents = 'auto';
+            pengurusTab.style.opacity = '1';
+            pengurusTab.style.cursor = 'pointer';
+            pengurusTab.title = '';
         }
         if (welcomeTitle) {
             welcomeTitle.textContent = 'Selamat datang di HIMAGRO HUB';
@@ -948,6 +986,8 @@ function updateModeDisplay() {
         indicator.style.display = 'none';
         bulkHeader.forEach(el => el.style.display = 'none');
         document.getElementById('proker-bulk-actions').style.display = 'none';
+        const guideBtn = document.getElementById('admin-guide-btn');
+        if (guideBtn) guideBtn.style.display = 'none';
         stopSCPolling();
     }
 
@@ -979,9 +1019,8 @@ function updateModeDisplay() {
 // ==================== SECTION SWITCHER ====================
 
 async function switchSection(section) {
-    // Cek jika di SC mode dan mencoba akses konten
-    if (currentMode === 'sc' && section === 'konten') {
-        showToast('Tab Konten tidak tersedia di Mode SC', 'error');
+    // Cek jika di SC mode dan mencoba akses konten atau kalender pengurus
+    if (currentMode === 'sc' && (section === 'konten' || section === 'pengurus')) {
         return;
     }
 
@@ -989,10 +1028,17 @@ async function switchSection(section) {
 
     // Update tab buttons
     document.getElementById('tab-proker').classList.toggle('active', section === 'proker');
+    if (document.getElementById('tab-pengurus')) {
+        document.getElementById('tab-pengurus').classList.toggle('active', section === 'pengurus');
+    }
     document.getElementById('tab-konten').classList.toggle('active', section === 'konten');
 
     // Show/hide sections
     document.getElementById('proker-section').style.display = section === 'proker' ? 'block' : 'none';
+    const pengurusSection = document.getElementById('pengurus-section');
+    if (pengurusSection) {
+        pengurusSection.style.display = section === 'pengurus' ? 'block' : 'none';
+    }
     document.getElementById('konten-section').style.display = section === 'konten' ? 'block' : 'none';
 
     // Lazy load konten data hanya saat user klik section konten
@@ -1011,6 +1057,8 @@ async function switchSection(section) {
     // Render sesuai section
     if (section === 'proker') {
         renderProkerView();
+    } else if (section === 'pengurus') {
+        renderPengurusCalendar();
     } else if (section === 'konten') {
         renderKontenView();
     }
@@ -1123,8 +1171,6 @@ function setProkerView(view) {
         view === 'monthly' ? 'block' : 'none';
     document.getElementById('proker-all-view').style.display =
         view === 'all' ? 'block' : 'none';
-    document.getElementById('proker-calendar-view').style.display =
-        view === 'calendar' ? 'block' : 'none';
 
     renderProkerView();
 }
@@ -1134,8 +1180,6 @@ function renderProkerView() {
         renderProkerMonthly();
     } else if (currentProkerView === 'all') {
         renderProkerTable();
-    } else if (currentProkerView === 'calendar') {
-        renderProkerCalendar();
     }
 }
 
@@ -1328,7 +1372,7 @@ function renderProkerCalendar() {
     let html = '<div class="calendar-grid">';
 
     // Day headers
-    const dayHeaders = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+    const dayHeaders = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
     dayHeaders.forEach(day => {
         html += `<div class="calendar-day-header">${day}</div>`;
     });
@@ -1380,6 +1424,105 @@ function changeCalendarMonth(delta) {
     renderProkerCalendar();
 }
 
+function renderPengurusCalendar() {
+    const container = document.getElementById('pengurus-calendar-container');
+    const monthYear = document.getElementById('pengurus-calendar-month-year');
+
+    if (!container || !monthYear) return;
+
+    const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    monthYear.textContent = `${monthNames[currentPengurusCalendarMonth]} ${currentPengurusCalendarYear}`;
+
+    const firstDay = new Date(currentPengurusCalendarYear, currentPengurusCalendarMonth, 1);
+    const startDate = new Date(firstDay);
+    startDate.setDate(startDate.getDate() - startDate.getDay());
+
+    let html = '<div class="calendar-grid">';
+
+    // Day headers
+    const dayHeaders = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    dayHeaders.forEach(day => {
+        html += `<div class="calendar-day-header">${day}</div>`;
+    });
+
+    // Calendar days
+    const currentDate = new Date(startDate);
+    for (let i = 0; i < 42; i++) {
+        const isCurrentMonth = currentDate.getMonth() === currentPengurusCalendarMonth;
+        const isToday = isSameDay(currentDate, new Date());
+
+        // Items on this day
+        const items = [];
+
+        // 1. Prokers
+        prokerData.forEach(p => {
+            if (p.dateObj && !isNaN(p.dateObj.getTime()) && isSameDay(p.dateObj, currentDate)) {
+                items.push({
+                    type: 'proker',
+                    nama: p.nama,
+                    statusSelesai: p.statusSelesai,
+                    id: p.id
+                });
+            }
+
+            // 2. Rapats
+            if (p.rapat && Array.isArray(p.rapat)) {
+                p.rapat.forEach(r => {
+                    // Try to parse rapat date (usually DD/MM/YYYY)
+                    let rDate = null;
+                    if (r.tanggal) {
+                        const parts = r.tanggal.split('/');
+                        if (parts.length === 3) {
+                            rDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                        }
+                    }
+                    if (rDate && !isNaN(rDate.getTime()) && isSameDay(rDate, currentDate)) {
+                        items.push({
+                            type: 'rapat',
+                            nama: `${r.jenisRapat} (${p.nama || ''})`,
+                            statusSelesai: false,
+                            id: p.id
+                        });
+                    }
+                });
+            }
+        });
+
+        html += `
+            <div class="calendar-day ${!isCurrentMonth ? 'other-month' : ''} ${isToday ? 'today' : ''}" 
+                 onclick="showCalendarDayDetails('${currentDate.toDateString()}', 'pengurus')"
+                 style="cursor: pointer;">
+                <div class="calendar-day-number">${currentDate.getDate()}</div>
+                ${items.length > 0 ? `
+                    ${items.slice(0, 2).map(item => `
+                        <div class="calendar-event-item ${item.type === 'rapat' ? 'rapat-event' : ''} ${item.statusSelesai ? 'status-success' : ''}" title="${escapeHtml(item.nama)}">
+                            ${escapeHtml(item.nama.substring(0, 15))}${item.nama.length > 15 ? '...' : ''}
+                        </div>
+                    `).join('')}
+                ` : ''}
+            </div>
+        `;
+
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function changePengurusCalendarMonth(delta) {
+    currentPengurusCalendarMonth += delta;
+    if (currentPengurusCalendarMonth < 0) {
+        currentPengurusCalendarMonth = 11;
+        currentPengurusCalendarYear--;
+    } else if (currentPengurusCalendarMonth > 11) {
+        currentPengurusCalendarMonth = 0;
+        currentPengurusCalendarYear++;
+    }
+    renderPengurusCalendar();
+}
+
 function filterProkerByMonth() {
     const select = document.getElementById('proker-month-select');
     currentProkerMonth = select.value || null;
@@ -1396,8 +1539,11 @@ function applyFilters() {
         if (p.isActive === false) return false;
 
         // 2. Filter by Month (if specified)
-        if (monthFilter !== null && (!p.dateObj || p.dateObj.getMonth() !== monthFilter)) {
-            return false;
+        // Jika tidak ada data tanggal, proker akan tetap muncul di semua filter bulan agar tidak hilang
+        if (monthFilter !== null) {
+            if (p.dateObj && p.dateObj.getMonth() !== monthFilter) {
+                return false;
+            }
         }
 
         // 3. Filter by Search
@@ -1627,7 +1773,7 @@ function renderProkerDetailInline(id, proker, rapatList, isUpdate = false) {
                 </div>
                 <div>
                     <strong>Tanggal:</strong><br>
-                    <span>${formatDate(proker.tanggal || '')}</span>
+                    <span>${formatDate(proker.tanggal) || '-'}</span>
                 </div>
                 <div>
                     <strong>Status:</strong><br>
@@ -1658,7 +1804,7 @@ function renderProkerDetailInline(id, proker, rapatList, isUpdate = false) {
                             <div style="border: 1px solid var(--border-color); border-radius: 6px; padding: 0.75rem; margin-bottom: 0.5rem; background: var(--bg-color);">
                                 <strong style="color: var(--primary-color); display: block; margin-bottom: 0.25rem;">${escapeHtml(r.jenisRapat || '-')}</strong>
                                 <div style="font-size: 0.875rem; color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: 0.5rem 1rem;">
-                                    <span><strong>Tanggal:</strong> ${formatDate(r.tanggalRap || '')}</span>
+                                    <span><strong>Tanggal:</strong> ${formatDate(r.tanggalRap) || '-'}</span>
                                     <span><strong>PIC:</strong> ${escapeHtml(r.pic || '-')}</span>
                                 </div>
                             </div>
@@ -1775,7 +1921,7 @@ function renderProkerDetailModal(detail) {
 
                 </div>
                 <div class="rapat-meta">
-                    <span>Tanggal: ${formatDate(r.tanggalRap)}</span>
+                    <span>Tanggal: ${formatDate(r.tanggalRap) || '-'}</span>
                     <span>PIC: ${escapeHtml(r.pic || '-')}</span>
                 </div>
             </div>
@@ -1869,12 +2015,12 @@ async function processBulkProker() {
         const divisiId = item.querySelector('.bulk-divisi').value;
         const picId = item.querySelector('.bulk-pic').value;
 
-        if (!nama || !tanggal || !divisiId || !picId) {
-            if (nama || tanggal || divisiId || picId) { // Only error if one is partially filled
-                showToast(`Mohon lengkapi Nama, Tanggal, Divisi, dan PIC untuk Proker #${index + 1}`, 'error');
+        if (!nama) {
+            if (tanggal || divisiId || picId) { // Error if partially filled without name
+                showToast(`Mohon isi Nama Proker untuk baris #${index + 1}`, 'error');
                 hasError = true;
             }
-            return; // Skip empty rows (if completely empty, though logically above check catches partials)
+            return;
         }
 
         // Collect Rapat for this proker
@@ -1903,9 +2049,9 @@ async function processBulkProker() {
 
         newProkers.push({
             nama,
-            divisiId,
-            picId,
-            tanggal,
+            divisiId: divisiId || '',
+            picId: picId || '',
+            tanggal: tanggal || '',
             proposal: false,
             rak: false,
             rab: false,
@@ -1921,7 +2067,7 @@ async function processBulkProker() {
     if (hasError) return;
 
     if (newProkers.length === 0) {
-        showToast('Minimal masukkan 1 proker yang lengkap', 'warning');
+        showToast('Minimal masukkan 1 nama proker', 'warning');
         return;
     }
 
@@ -2120,7 +2266,7 @@ async function deleteProker(id) {
         return;
     }
 
-    showLoading();
+    showLoading('Sedang menghapus proker...');
     try {
         const url = `${APPS_SCRIPT_URL}?action=deleteProker&id=${id}&username=${encodeURIComponent(currentUser.username)}&scId=${encodeURIComponent(currentUser.scId)}&nama=${encodeURIComponent(currentUser.nama)}`;
 
@@ -2191,7 +2337,7 @@ async function loadKontenData() {
     }
 
     // Jika tidak ada cache atau cache expired, load dari server
-    showLoading();
+    showLoading('Sedang memuat data konten...');
     try {
         const response = await fetch(`${APPS_SCRIPT_URL}?action=getKonten&_=${now}`);
         const result = await response.json();
@@ -2371,7 +2517,7 @@ function renderKontenCalendar() {
 
     let html = '<div class="calendar-grid">';
 
-    const dayHeaders = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+    const dayHeaders = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
     dayHeaders.forEach(day => {
         html += `<div class="calendar-day-header">${day}</div>`;
     });
@@ -2527,7 +2673,9 @@ function closeProkerDetailModal() {
     document.getElementById('proker-detail-modal').classList.remove('show');
 }
 
-function showLoading() {
+function showLoading(text = 'Sedang memuat...') {
+    const loadingTextEl = document.getElementById('loading-text');
+    if (loadingTextEl) loadingTextEl.textContent = text;
     document.getElementById('loading-overlay').classList.add('show');
 }
 
@@ -2729,7 +2877,7 @@ async function saveBatchChanges() {
 
     if (updates.length === 0) return;
 
-    showLoading();
+    showLoading(`Sedang menyimpan ${updates.length} perubahan...`);
     try {
         const payload = {
             action: 'batchUpdateProker',
@@ -2763,3 +2911,72 @@ async function saveBatchChanges() {
         hideLoading();
     }
 }
+
+// ==================== ADMIN GUIDE (PEWARISAN) ====================
+
+function showAdminGuide() {
+    // Reset to first tab
+    switchAGTab('ag-task');
+    document.getElementById('admin-guide-modal').classList.add('show');
+}
+
+function closeAdminGuide() {
+    document.getElementById('admin-guide-modal').classList.remove('show');
+}
+
+function switchAGTab(tabId) {
+    // Hide all content
+    document.querySelectorAll('.ag-content').forEach(el => {
+        el.style.display = 'none';
+    });
+    // Remove active class from tabs
+    document.querySelectorAll('.ag-tab').forEach(el => {
+        el.classList.remove('active');
+    });
+
+    // Show selected content
+    const targetContent = document.getElementById(tabId);
+    if (targetContent) {
+        targetContent.style.display = 'block';
+    }
+
+    // Add active class to clicked tab
+    // Find the button that has the onclick matching this tabId
+    document.querySelectorAll('.ag-tab').forEach(btn => {
+        if (btn.getAttribute('onclick').includes(tabId)) {
+            btn.classList.add('active');
+        }
+    });
+}
+
+// ==================== PWA INSTALLATION LOGIC ====================
+let deferredPrompt;
+const installBtn = document.getElementById('install-btn');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    // Tangkap prompt instalasi
+    e.preventDefault();
+    deferredPrompt = e;
+    // Tampilkan tombol instalasi
+    if (installBtn) installBtn.style.display = 'inline-flex';
+});
+
+if (installBtn) {
+    installBtn.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        // Tampilkan prompt ke user
+        deferredPrompt.prompt();
+        // Tunggu respon user
+        const { outcome } = await deferredPrompt.userChoice;
+        console.log(`User response to the install prompt: ${outcome}`);
+        // Reset prompt agar tidak bisa digunakan lagi
+        deferredPrompt = null;
+        // Sembunyikan tombol
+        installBtn.style.display = 'none';
+    });
+}
+
+window.addEventListener('appinstalled', (evt) => {
+    console.log('HIMAGRO HUB was installed.');
+    if (installBtn) installBtn.style.display = 'none';
+});

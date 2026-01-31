@@ -25,7 +25,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
+    <!-- Font Awesome v6 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -55,16 +56,16 @@
                 </div>
 
                 <button id="install-btn" class="icon-btn" style="display: none;" title="Instal Aplikasi">
-                    <span>📲</span>
+                    <i class="fa-solid fa-mobile-screen-button"></i>
                 </button>
                 <button class="icon-btn" onclick="showHelpModal()" title="Panduan Penggunaan">
-                    <span>❓</span>
+                    <i class="fa-solid fa-circle-question"></i>
                 </button>
                 <button class="icon-btn" onclick="refreshData()" title="Refresh Data">
-                    <span>🔄</span>
+                    <i class="fa-solid fa-arrows-rotate"></i>
                 </button>
                 <button class="icon-btn" onclick="clearCache()" title="Reset Aplikasi (Clear Cache)">
-                    <span>🗑️</span>
+                    <i class="fa-solid fa-trash-can"></i>
                 </button>
                 <div class="mode-switcher">
                     <span class="mode-badge" id="current-mode">Mode: Staff</span>
@@ -88,13 +89,13 @@
         <!-- Section Selector Tabs -->
         <div class="section-tabs">
             <button class="tab-btn active" onclick="switchSection('proker')" id="tab-proker">
-                📊 Program Kerja
+                <i class="fa-solid fa-chart-simple"></i> Program Kerja
             </button>
             <button class="tab-btn" onclick="switchSection('pengurus')" id="tab-pengurus">
-                🗓️ Kalender Pengurus
+                <i class="fa-solid fa-calendar-days"></i> Kalender Pengurus
             </button>
             <button class="tab-btn" onclick="switchSection('konten')" id="tab-konten">
-                📰 Konten Media Sosial
+                <i class="fa-solid fa-newspaper"></i> Konten Media Sosial
             </button>
         </div>
 
@@ -103,35 +104,33 @@
             <div class="section-header">
                 <h2>Data Program Kerja</h2>
                 <div class="section-actions">
-                    <div class="view-toggle">
-                        <button class="view-btn active" data-view="monthly" onclick="setProkerView('monthly')">
-                            <span>📅</span> Per Bulan
-                        </button>
-                        <button class="view-btn" data-view="all" onclick="setProkerView('all')">
-                            <span>📋</span> Semua
-                        </button>
-                    </div>
                     <button class="btn btn-primary" onclick="showAddProkerModal()" id="add-proker-btn"
                         style="display: none;">
-                        <span>+</span> Tambah Proker
+                        <i class="fa-solid fa-plus"></i> Tambah Proker
                     </button>
                     <button class="btn btn-success" onclick="showBulkProkerModal()" id="bulk-proker-btn"
                         style="display: none;">
-                        <span>📦</span> Tambah Massal
+                        <i class="fa-solid fa-boxes-stacked"></i> Tambah Massal
                     </button>
                 </div>
             </div>
 
-            <!-- Month Filter (for monthly view) -->
-            <div class="filter-container" id="proker-month-filter">
-                <label>Pilih Bulan:</label>
-                <select id="proker-month-select" onchange="filterProkerByMonth()">
-                    <option value="">Semua Bulan</option>
-                </select>
-            </div>
-
-            <div class="search-bar">
-                <input type="text" id="proker-search" placeholder="Cari proker..." onkeyup="searchProker()">
+            <!-- Filters & Search Bar Toolbar -->
+            <div class="controls-row">
+                <div class="filter-group">
+                    <select id="proker-month-select" onchange="applyFilters()">
+                        <option value="">Semua Bulan</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <select id="proker-divisi-select" onchange="applyFilters()">
+                        <option value="">Semua Divisi</option>
+                    </select>
+                </div>
+                <div class="search-bar">
+                    <input type="text" id="proker-search" placeholder="Cari proker atau PIC..."
+                        onkeyup="searchProker()">
+                </div>
             </div>
 
             <!-- Bulk Actions Bar -->
@@ -139,7 +138,7 @@
                 <span id="selected-count">0 item terpilih</span>
                 <div class="bulk-btns">
                     <button class="btn btn-danger btn-sm" onclick="deleteSelectedProker()">
-                        <span>🗑️</span> Hapus Terpilih
+                        <i class="fa-solid fa-trash-can"></i> Hapus Terpilih
                     </button>
                     <button class="btn btn-secondary btn-sm" onclick="clearProkerSelection()">
                         Batal
@@ -147,13 +146,10 @@
                 </div>
             </div>
 
-            <!-- Monthly List View -->
-            <div id="proker-monthly-view" class="data-view">
-                <div id="proker-monthly-content"></div>
-            </div>
 
-            <!-- All List View -->
-            <div id="proker-all-view" class="data-view" style="display: none;">
+
+            <!-- All List View (Default & Only View) -->
+            <div id="proker-all-view" class="data-view">
                 <div class="table-container">
                     <table id="proker-table">
                         <thead>
@@ -164,7 +160,8 @@
                                 </th>
                                 <th>No</th>
                                 <th>Nama Proker</th>
-                                <th>Divisi ID</th>
+                                <th>Divisi</th>
+                                <th>PIC</th>
                                 <th>Tanggal</th>
                                 <th>Progress</th>
                                 <th>Aksi</th>
@@ -192,9 +189,11 @@
 
             <div id="pengurus-calendar-view" class="data-view">
                 <div class="calendar-controls">
-                    <button class="icon-btn" onclick="changePengurusCalendarMonth(-1)">◀</button>
+                    <button class="icon-btn" onclick="changePengurusCalendarMonth(-1)"><i
+                            class="fa-solid fa-chevron-left"></i></button>
                     <h3 id="pengurus-calendar-month-year"></h3>
-                    <button class="icon-btn" onclick="changePengurusCalendarMonth(1)">▶</button>
+                    <button class="icon-btn" onclick="changePengurusCalendarMonth(1)"><i
+                            class="fa-solid fa-chevron-right"></i></button>
                 </div>
                 <div id="pengurus-calendar-container"></div>
             </div>
@@ -206,38 +205,30 @@
                 <h2>Konten Media Sosial</h2>
                 <div class="section-actions">
                     <div class="view-toggle">
-                        <button class="view-btn active" data-view="monthly" onclick="setKontenView('monthly')">
-                            <span>📅</span> Per Bulan
-                        </button>
-                        <button class="view-btn" data-view="all" onclick="setKontenView('all')">
-                            <span>📋</span> Semua
+                        <button class="view-btn active" data-view="all" onclick="setKontenView('all')">
+                            <i class="fa-solid fa-list-ul"></i> Semua
                         </button>
                         <button class="view-btn" data-view="calendar" onclick="setKontenView('calendar')">
-                            <span>🗓️</span> Kalender
+                            <i class="fa-solid fa-calendar-days"></i> Kalender
                         </button>
                     </div>
                 </div>
             </div>
 
-            <!-- Month Filter (for monthly view) -->
-            <div class="filter-container" id="konten-month-filter">
-                <label>Pilih Bulan:</label>
-                <select id="konten-month-select" onchange="filterKontenByMonth()">
-                    <option value="">Semua Bulan</option>
-                </select>
-            </div>
-
-            <div class="search-bar">
-                <input type="text" id="konten-search" placeholder="Cari konten..." onkeyup="searchKonten()">
-            </div>
-
-            <!-- Monthly List View -->
-            <div id="konten-monthly-view" class="data-view">
-                <div id="konten-monthly-content"></div>
+            <!-- Filters & Search Bar Toolbar -->
+            <div class="controls-row">
+                <div class="filter-group">
+                    <select id="konten-month-select" onchange="filterKontenByMonth()">
+                        <option value="">Semua Bulan</option>
+                    </select>
+                </div>
+                <div class="search-bar">
+                    <input type="text" id="konten-search" placeholder="Cari konten..." onkeyup="searchKonten()">
+                </div>
             </div>
 
             <!-- All List View -->
-            <div id="konten-all-view" class="data-view" style="display: none;">
+            <div id="konten-all-view" class="data-view">
                 <div class="table-container">
                     <table id="konten-table">
                         <thead>
@@ -259,9 +250,11 @@
             <!-- Calendar View -->
             <div id="konten-calendar-view" class="data-view" style="display: none;">
                 <div class="calendar-controls">
-                    <button class="icon-btn" onclick="changeKontenCalendarMonth(-1)">◀</button>
+                    <button class="icon-btn" onclick="changeKontenCalendarMonth(-1)"><i
+                            class="fa-solid fa-chevron-left"></i></button>
                     <h3 id="konten-calendar-month-year"></h3>
-                    <button class="icon-btn" onclick="changeKontenCalendarMonth(1)">▶</button>
+                    <button class="icon-btn" onclick="changeKontenCalendarMonth(1)"><i
+                            class="fa-solid fa-chevron-right"></i></button>
                 </div>
                 <div id="konten-calendar-container"></div>
             </div>
@@ -273,7 +266,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Masuk Mode SC</h3>
-                <span class="close" onclick="closeLoginModal()">&times;</span>
+                <span class="close" onclick="closeLoginModal()"><i class="fa-solid fa-xmark"></i></span>
             </div>
             <form id="login-form" onsubmit="loginSC(event)">
                 <div class="form-group">
@@ -306,7 +299,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3 id="modal-title">Tambah Proker Baru</h3>
-                <span class="close" onclick="closeProkerModal()">&times;</span>
+                <span class="close" onclick="closeProkerModal()"><i class="fa-solid fa-xmark"></i></span>
             </div>
             <form id="proker-form" onsubmit="saveProker(event)">
                 <input type="hidden" id="proker-id" value="">
@@ -360,7 +353,7 @@
                         <label>Data Rapat</label>
                         <button type="button" class="btn btn-sm" style="background: var(--success-color); color: white;"
                             onclick="addRapatForm()">
-                            <span>+</span> Tambah Rapat
+                            <i class="fa-solid fa-plus"></i> Tambah Rapat
                         </button>
                     </div>
                     <div id="rapat-forms-container">
@@ -381,7 +374,7 @@
         <div class="modal-content" style="max-width: 700px;">
             <div class="modal-header">
                 <h3>Detail Proker</h3>
-                <span class="close" onclick="closeProkerDetailModal()">&times;</span>
+                <span class="close" onclick="closeProkerDetailModal()"><i class="fa-solid fa-xmark"></i></span>
             </div>
             <div style="padding: 1.5rem;">
                 <div class="detail-section">
@@ -499,7 +492,7 @@
             style="max-width: 900px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;">
             <div class="modal-header">
                 <h3>Tambah Proker Massal</h3>
-                <span class="close" onclick="closeBulkProkerModal()">&times;</span>
+                <span class="close" onclick="closeBulkProkerModal()"><i class="fa-solid fa-xmark"></i></span>
             </div>
             <div style="padding: 1.5rem; flex: 1; display: flex; flex-direction: column; overflow: hidden;">
                 <div id="bulk-proker-forms-container"
@@ -509,7 +502,7 @@
 
                 <div style="text-align: center; margin: 1rem 0;">
                     <button type="button" class="btn btn-sm btn-success" onclick="addBulkProkerForm()">
-                        <span>+</span> Tambah Proker Lainnya
+                        <i class="fa-solid fa-plus"></i> Tambah Proker Lainnya
                     </button>
                 </div>
 
@@ -517,7 +510,7 @@
                     style="justify-content: center; gap: 1rem; border-top: 1px solid var(--border-color); padding: 1rem 0 0 0; margin-top: 0.5rem;">
                     <button type="button" class="btn btn-secondary" onclick="closeBulkProkerModal()">Batal</button>
                     <button type="button" class="btn btn-primary" onclick="processBulkProker()">
-                        <span>🚀</span> Simpan Semua Proker
+                        <i class="fa-solid fa-rocket"></i> Simpan Semua Proker
                     </button>
                 </div>
             </div>
@@ -538,23 +531,27 @@
     <!-- Floating Admin Guide Button (Only for SC) -->
     <button id="admin-guide-btn" class="floating-btn admin-guide-btn" onclick="showAdminGuide()" style="display: none;"
         title="Panduan SC">
-        <span>📜</span> Panduan SC
+        <i class="fa-solid fa-scroll"></i> Panduan SC
     </button>
 
     <!-- Modal Panduan Admin (SC) -->
     <div id="admin-guide-modal" class="modal">
         <div class="modal-content" style="max-width: 900px; max-height: 90vh; display: flex; flex-direction: column;">
             <div class="modal-header">
-                <h3>📜 Panduan Teknis & Pengelolaan Steering Committee</h3>
-                <span class="close" onclick="closeAdminGuide()">&times;</span>
+                <h3><i class="fa-solid fa-scroll"></i> Panduan Teknis & Pengelolaan Steering Committee</h3>
+                <span class="close" onclick="closeAdminGuide()"><i class="fa-solid fa-xmark"></i></span>
             </div>
             <div style="padding: 1.5rem; flex: 1; overflow-y: auto;">
 
                 <div class="admin-guide-tabs">
-                    <button class="ag-tab active" onclick="switchAGTab('ag-task')">✚ Tambah Task</button>
-                    <button class="ag-tab" onclick="switchAGTab('ag-edit')">✎ Edit & Admin</button>
-                    <button class="ag-tab" onclick="switchAGTab('ag-db')">📊 Database (Spreadsheet)</button>
-                    <button class="ag-tab" onclick="switchAGTab('ag-warn')">⚠️ Peringatan</button>
+                    <button class="ag-tab active" onclick="switchAGTab('ag-task')"><i class="fa-solid fa-plus"></i>
+                        Tambah Task</button>
+                    <button class="ag-tab" onclick="switchAGTab('ag-edit')"><i class="fa-solid fa-pen"></i> Edit &
+                        Admin</button>
+                    <button class="ag-tab" onclick="switchAGTab('ag-db')"><i class="fa-solid fa-database"></i> Database
+                        (Spreadsheet)</button>
+                    <button class="ag-tab" onclick="switchAGTab('ag-warn')"><i
+                            class="fa-solid fa-triangle-exclamation"></i> Peringatan</button>
                 </div>
 
                 <div id="ag-task" class="ag-content">
@@ -588,7 +585,8 @@
                     <!-- Detail Sheet Proker -->
                     <div
                         style="margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
-                        <h5 style="color: var(--primary-color); margin-bottom: 0.5rem;">📁 Sheet: Proker (Data Utama)
+                        <h5 style="color: var(--primary-color); margin-bottom: 0.5rem;"><i
+                                class="fa-solid fa-folder-open"></i> Sheet: Proker (Data Utama)
                         </h5>
                         <ul style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.8;">
                             <li><strong>ID:</strong> (Otomatis) ID unik bersifat permanen. Jangan diubah kecuali
@@ -609,7 +607,8 @@
                     <!-- Detail Sheet Rapat -->
                     <div
                         style="margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
-                        <h5 style="color: var(--primary-color); margin-bottom: 0.5rem;">📁 Sheet: rapat_proker (Jadwal
+                        <h5 style="color: var(--primary-color); margin-bottom: 0.5rem;"><i
+                                class="fa-solid fa-folder-open"></i> Sheet: rapat_proker (Jadwal
                             Rapat)</h5>
                         <ul style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.8;">
                             <li><strong>idProker:</strong> Harus sama persis dengan ID di sheet Proker agar terhubung.
@@ -625,7 +624,8 @@
                     <!-- Detail Sheet Master -->
                     <div
                         style="margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
-                        <h5 style="color: var(--primary-color); margin-bottom: 0.5rem;">📁 Sheet: MasterPIC,
+                        <h5 style="color: var(--primary-color); margin-bottom: 0.5rem;"><i
+                                class="fa-solid fa-folder-open"></i> Sheet: MasterPIC,
                             MasterDivisi, & MasterRapat</h5>
                         <ul style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.8;">
                             <li><strong>MasterPIC:</strong> Tambah Nama Pengurus agar muncul di pilihan PIC Web.
@@ -642,7 +642,8 @@
                     <!-- Detail Sheet MasterSC -->
                     <div
                         style="margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
-                        <h5 style="color: #f59e0b; margin-bottom: 0.5rem;">🔐 Sheet: MasterSC (Data Login)</h5>
+                        <h5 style="color: #f59e0b; margin-bottom: 0.5rem;"><i class="fa-solid fa-lock"></i> Sheet:
+                            MasterSC (Data Login)</h5>
                         <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Sheet ini
                             sangat rahasia. Digunakan untuk autentikasi login pengurus SC.</p>
                         <ul style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.8;">
@@ -672,7 +673,7 @@
                     <div style="text-align: center; margin-top: 2rem;">
                         <a href="https://docs.google.com/spreadsheets/d/1q78bgXcbS1pHizgXnY43fJSezlZxwK3R73JAGP_05No/edit?usp=sharing"
                             target="_blank" class="btn btn-primary" style="width: 100%; padding: 1rem;">
-                            <span>🔗</span> Buka Spreadsheet Database Utama
+                            <i class="fa-solid fa-link"></i> Buka Spreadsheet Database Utama
                         </a>
                     </div>
                 </div>
@@ -681,13 +682,17 @@
                     <h4>4. Peringatan Penting</h4>
                     <div
                         style="color: #ef4444; background: rgba(239, 68, 68, 0.1); padding: 1rem; border-radius: 8px; border: 1px solid #ef4444;">
-                        <p style="margin-bottom: 0.5rem;"><strong>🛑 Jangan Hapus Baris Secara Sembarangan:</strong>
+                        <p style="margin-bottom: 0.5rem;"><i class="fa-solid fa-circle-stop"></i> <strong>Jangan Hapus
+                                Baris Secara Sembarangan:</strong>
                             Menghapus baris di spreadsheet tanpa melalui Web dapat menyebabkan sinkronisasi ID
                             bermasalah.</p>
-                        <p style="margin-bottom: 0.5rem;"><strong>🕒 Aktivitas Tercatat:</strong> Setiap perubahan
+                        <p style="margin-bottom: 0.5rem;"><i class="fa-solid fa-clock-rotate-left"></i>
+                            <strong>Aktivitas Tercatat:</strong> Setiap perubahan
                             (Create, Update, Delete) yang dilakukan di Mode SC akan mencatat Username dan Waktu di
-                            sistem sebagai bukti pertanggungjawaban.</p>
-                        <p><strong>💾 Selalu Backup:</strong> Sebelum melakukan perubahan besar di spreadsheet langsung,
+                            sistem sebagai bukti pertanggungjawaban.
+                        </p>
+                        <p><i class="fa-solid fa-floppy-disk"></i> <strong>Selalu Backup:</strong> Sebelum melakukan
+                            perubahan besar di spreadsheet langsung,
                             pastikan Anda mencadangkan file atau menduplikasi sheet tersebut.</p>
                     </div>
                 </div>
@@ -703,15 +708,15 @@
     <div id="help-modal" class="modal">
         <div class="modal-content" style="max-width: 700px; max-height: 85vh; display: flex; flex-direction: column;">
             <div class="modal-header">
-                <h3>📖 Panduan Penggunaan HIMAGRO HUB</h3>
-                <span class="close" onclick="closeHelpModal()">&times;</span>
+                <h3><i class="fa-solid fa-newspaper"></i> Panduan Penggunaan HIMAGRO HUB</h3>
+                <span class="close" onclick="closeHelpModal()"><i class="fa-solid fa-xmark"></i></span>
             </div>
             <div style="padding: 1.5rem; flex: 1; overflow-y: auto;">
 
                 <div class="help-item" style="margin-bottom: 2rem;">
                     <h4
                         style="color: var(--primary-color); border-bottom: 2px solid var(--primary-color); padding-bottom: 0.5rem; margin-bottom: 1rem;">
-                        📍 Hak Akses & Navigasi
+                        <i class="fa-solid fa-location-dot"></i> Hak Akses & Navigasi
                     </h4>
                     <p style="font-size: 0.9rem; color: var(--text-primary); font-weight: 600; margin-bottom: 0.75rem;">
                         Status: Pengguna Umum (Staff) - Hak Akses "Lihat Saja".
@@ -730,21 +735,24 @@
                 <div class="help-item" style="margin-bottom: 2rem;">
                     <h4
                         style="color: var(--accent-color); border-bottom: 2px solid var(--accent-color); padding-bottom: 0.5rem; margin-bottom: 1rem;">
-                        🛠️ Fitur & Fungsi Tombol
+                        <i class="fa-solid fa-screwdriver-wrench"></i> Fitur & Fungsi Tombol
                     </h4>
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
                         <div style="background: rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 8px;">
-                            <strong style="display: block; margin-bottom: 0.25rem;">🔄 Refresh Data:</strong>
+                            <strong style="display: block; margin-bottom: 0.25rem;"><i
+                                    class="fa-solid fa-arrows-rotate"></i> Refresh Data:</strong>
                             <span style="font-size: 0.85rem; color: var(--text-secondary);">Mengambil data terbaru dari
                                 server jika pengurus SC baru saja melakukan update.</span>
                         </div>
                         <div style="background: rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 8px;">
-                            <strong style="display: block; margin-bottom: 0.25rem;">🗑️ Reset Aplikasi:</strong>
+                            <strong style="display: block; margin-bottom: 0.25rem;"><i
+                                    class="fa-solid fa-trash-can"></i> Reset Aplikasi:</strong>
                             <span style="font-size: 0.85rem; color: var(--text-secondary);">Gunakan jika aplikasi terasa
                                 error atau data tidak mau muncul (Clear Cache).</span>
                         </div>
                         <div style="background: rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 8px;">
-                            <strong style="display: block; margin-bottom: 0.25rem;">🛡️ Mode SC (Admin):</strong>
+                            <strong style="display: block; margin-bottom: 0.25rem;"><i
+                                    class="fa-solid fa-shield-halved"></i> Mode SC (Admin):</strong>
                             <span style="font-size: 0.85rem; color: var(--text-secondary);">Tombol login khusus pengurus
                                 untuk manajemen data kegiatan.</span>
                         </div>

@@ -11,13 +11,15 @@ let filteredKonten = [];
 let masterDivisi = [];
 let masterPIC = [];
 let masterRapat = [];
+let divisiMap = {}; // Lookup Map for Divisi names
+let picMap = {};    // Lookup Map for PIC names
 
 // State management
 let currentMode = 'staff'; // 'staff' or 'sc'
 let currentUser = null; // { username, password }
 let pendingChanges = {}; // { prokerId: { field: value } }
 let currentSection = 'proker'; // 'proker' or 'konten'
-let currentProkerView = 'monthly'; // 'monthly', 'all', 'calendar'
+let currentProkerView = 'all'; // Default now to 'all' as requested
 let currentKontenView = 'monthly'; // 'monthly', 'all', 'calendar'
 let currentProkerMonth = null;
 let currentKontenMonth = null;
@@ -178,21 +180,25 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     // Load hanya master data dan proker data saat pertama kali (lazy loading untuk konten)
     showLoading('Sedang memuat data awal...');
-    await Promise.all([
-        loadMasterData(),
-        loadProkerData({ force: false, silent: true }) // Silent true because we show manual loading here
-    ]);
+    try {
+        await Promise.all([
+            loadMasterData(),
+            loadProkerData({ force: false, silent: true }) // Silent true because we show manual loading here
+        ]);
 
-    // First time onboarding check
-    if (!localStorage.getItem('hasSeenHelp')) {
-        showHelpModal();
-        localStorage.setItem('hasSeenHelp', 'true');
+        // First time onboarding check
+        if (!localStorage.getItem('hasSeenHelp')) {
+            showHelpModal();
+            localStorage.setItem('hasSeenHelp', 'true');
+        }
+
+        populateMonthFilters();
+        switchSection('proker'); // Default show Proker
+    } catch (e) {
+        console.error('Error during initial load:', e);
+    } finally {
+        hideLoading(); // Pastikan loading di-hide apapun yang terjadi
     }
-
-    populateMonthFilters();
-    switchSection('proker'); // Default show Proker
-    hideLoading(); // Pastikan loading di-hide setelah semua data loaded 
-
     // Aktifkan mode transisi normal setelah loading awal selesai
     document.getElementById('welcome-logo-container').style.display = 'none';
     document.getElementById('welcome-title').style.display = 'none';
@@ -222,44 +228,60 @@ function startGlobalSync() {
 
 async function loadMasterData(options = {}) {
     const silent = options.silent || false;
-    try {
-        // Load Master Divisi
-        const divisiResponse = await fetch(`${APPS_SCRIPT_URL}?action=getMasterDivisi&_=${Date.now()}`);
-        if (!divisiResponse.ok) {
-            throw new Error(`HTTP error! status: ${divisiResponse.status}`);
-        }
-        const divisiResult = await divisiResponse.json();
-        if (divisiResult.success) {
-            const oldDivisiHash = JSON.stringify(masterDivisi);
-            masterDivisi = divisiResult.data || [];
-            if (JSON.stringify(masterDivisi) !== oldDivisiHash) {
+    const force = options.force || false;
+    const now = Date.now();
+    const cacheKey = 'masterDataCache';
+    const cacheTime = localStorage.getItem(cacheKey + '_time');
+
+    // Use cache if available and not forced
+    if (!force && cacheTime && (now - parseInt(cacheTime)) < 300000) {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+            try {
+                const data = JSON.parse(cached);
+                masterDivisi = data.divisi || [];
+                masterPIC = data.pic || [];
+                masterRapat = data.rapat || [];
+                updateDivisiMap();
+                updatePicMap();
                 populateDivisiDropdown();
-            }
-        }
-
-        // Load Master PIC
-        const picResponse = await fetch(`${APPS_SCRIPT_URL}?action=getMasterPIC&_=${Date.now()}`);
-        if (!picResponse.ok) {
-            throw new Error(`HTTP error! status: ${picResponse.status}`);
-        }
-        const picResult = await picResponse.json();
-        if (picResult.success) {
-            const oldPicHash = JSON.stringify(masterPIC);
-            masterPIC = picResult.data || [];
-            if (JSON.stringify(masterPIC) !== oldPicHash) {
                 populatePICDropdown();
-            }
+                console.log('Loaded master data from cache');
+                return;
+            } catch (e) { console.error('Error parsing master cache:', e); }
         }
+    }
 
-        // Load Master Rapat
-        const rapatResponse = await fetch(`${APPS_SCRIPT_URL}?action=getMasterRapat&_=${Date.now()}`);
-        if (!rapatResponse.ok) {
-            throw new Error(`HTTP error! status: ${rapatResponse.status}`);
-        }
-        const rapatResult = await rapatResponse.json();
-        if (rapatResult.success) {
-            masterRapat = rapatResult.data || [];
-        }
+    try {
+        // Fetch all in parallel for speed
+        const [divResponse, picResponse, rapatResponse] = await Promise.all([
+            fetch(`${APPS_SCRIPT_URL}?action=getMasterDivisi&_=${now}`),
+            fetch(`${APPS_SCRIPT_URL}?action=getMasterPIC&_=${now}`),
+            fetch(`${APPS_SCRIPT_URL}?action=getMasterRapat&_=${now}`)
+        ]);
+
+        const [d_res, p_res, r_res] = await Promise.all([
+            divResponse.json(),
+            picResponse.json(),
+            rapatResponse.json()
+        ]);
+
+        if (d_res.success) masterDivisi = d_res.data || [];
+        if (p_res.success) masterPIC = p_res.data || [];
+        if (r_res.success) masterRapat = r_res.data || [];
+
+        updateDivisiMap();
+        updatePicMap();
+        populateDivisiDropdown();
+        populatePICDropdown();
+
+        // Save to cache
+        localStorage.setItem(cacheKey, JSON.stringify({
+            divisi: masterDivisi,
+            pic: masterPIC,
+            rapat: masterRapat
+        }));
+        localStorage.setItem(cacheKey + '_time', now.toString());
 
     } catch (error) {
         if (!silent) console.error('Error loading master data:', error);
@@ -269,24 +291,41 @@ async function loadMasterData(options = {}) {
     }
 }
 
+function updateDivisiMap() {
+    divisiMap = {};
+    masterDivisi.forEach(d => {
+        divisiMap[d.divisiId] = d.namaDivisi || d.divisiId;
+    });
+}
+
+function updatePicMap() {
+    picMap = {};
+    masterPIC.forEach(p => {
+        picMap[p.picId] = {
+            nama: p.namaPic || p.picId,
+            email: p.email || '',
+            namaLower: (p.namaPic || '').toLowerCase()
+        };
+    });
+}
+
 function populateDivisiDropdown() {
     const select = document.getElementById('proker-divisi-id');
     if (!select) return;
 
-    // Clear existing options except first
-    select.innerHTML = '<option value="">Pilih Divisi</option>';
+    const selects = [select, document.getElementById('proker-divisi-select')];
 
-    if (!masterDivisi || masterDivisi.length === 0) {
-        console.warn('Master Divisi kosong, pastikan data sudah di-load');
-        return;
-    }
+    selects.forEach(sel => {
+        if (!sel) return;
+        const isFilter = sel.id === 'proker-divisi-select';
+        sel.innerHTML = isFilter ? '<option value="">Semua Divisi</option>' : '<option value="">Pilih Divisi</option>';
 
-    masterDivisi.forEach(divisi => {
-        const option = document.createElement('option');
-        option.value = divisi.divisiId;
-        // Tampilkan nama divisi, jika tidak ada nama tampilkan ID saja
-        option.textContent = divisi.namaDivisi ? `${divisi.namaDivisi} (${divisi.divisiId})` : divisi.divisiId;
-        select.appendChild(option);
+        masterDivisi.forEach(divisi => {
+            const option = document.createElement('option');
+            option.value = divisi.divisiId;
+            option.textContent = divisi.namaDivisi ? `${divisi.namaDivisi} (${divisi.divisiId})` : divisi.divisiId;
+            sel.appendChild(option);
+        });
     });
 }
 
@@ -683,17 +722,30 @@ async function saveProker(event) {
             showToast(id ? 'Proker berhasil diperbarui!' : 'Proker berhasil ditambahkan!', 'success');
             closeProkerModal();
 
+            // Optimistic local update to avoid propagation delay
+            const updatedProker = {
+                ...proker,
+                id: id || (result.data ? result.data.id : null),
+                isActive: true,
+                updatedAt: new Date().toISOString()
+            };
+
             if (id) {
                 const index = prokerData.findIndex(p => p.id === id);
                 if (index !== -1) {
-                    prokerData[index] = { ...prokerData[index], ...proker, id: id };
-                    localStorage.setItem('prokerDataCache', JSON.stringify(prokerData.map(p => ({ ...p, dateObj: null }))));
-                    applyFilters();
-                    renderProkerView();
+                    prokerData[index] = { ...prokerData[index], ...updatedProker };
                 }
-            } else {
-                loadProkerData(true);
+            } else if (updatedProker.id) {
+                // If it's a new proker, add to the start of the list
+                updatedProker.createdAt = new Date().toISOString();
+                prokerData.unshift(updatedProker);
             }
+
+            // Re-process locally to update dateObj and re-render
+            processProkerData(prokerData);
+
+            // Still force a background refresh to sync with authoritative server data
+            await loadProkerData({ force: true, silent: true });
         } else {
             showToast('Gagal menyimpan: ' + (result.message || 'Unknown error'), 'error');
         }
@@ -925,7 +977,7 @@ function updateModeDisplay() {
             modeBadge.textContent = 'Mode: SC';
         }
         modeBadge.className = 'mode-badge sc-active';
-        switchBtn.textContent = 'Keluar Mode SC';
+        switchBtn.innerHTML = '<i class="fa-solid fa-right-from-bracket"></i> Keluar Mode SC';
         switchBtn.onclick = logoutSC;
         addProkerBtn.style.display = 'inline-flex';
         bulkProkerBtn.style.display = 'inline-flex';
@@ -958,7 +1010,7 @@ function updateModeDisplay() {
     } else {
         modeBadge.textContent = 'Mode: Staff';
         modeBadge.className = 'mode-badge';
-        switchBtn.textContent = 'Masuk Mode SC';
+        switchBtn.innerHTML = '<i class="fa-solid fa-lock"></i> Masuk Mode SC';
         switchBtn.onclick = showLoginModal;
         addProkerBtn.style.display = 'none';
         bulkProkerBtn.style.display = 'none';
@@ -995,7 +1047,7 @@ function updateModeDisplay() {
     const prokerViewButtons = document.querySelectorAll('#proker-section .view-btn');
     prokerViewButtons.forEach(btn => {
         const view = btn.dataset.view;
-        if (currentMode === 'sc' && (view === 'monthly' || view === 'calendar')) {
+        if (currentMode === 'sc' && view === 'calendar') {
             btn.style.pointerEvents = 'none';
             btn.style.opacity = '0.5';
             btn.style.cursor = 'not-allowed';
@@ -1074,7 +1126,7 @@ async function loadProkerData(options = {}) {
     const now = Date.now();
 
     // Use cache if valid and NOT forced
-    if (!force && !silent && cacheTime && (now - parseInt(cacheTime)) < 300000) {
+    if (!force && cacheTime && (now - parseInt(cacheTime)) < 300000) {
         const cached = localStorage.getItem(cacheKey);
         if (cached) {
             try {
@@ -1095,7 +1147,8 @@ async function loadProkerData(options = {}) {
             const currentHash = JSON.stringify(result.data);
             const isDifferent = currentHash !== lastProkerDataHash;
 
-            if (isDifferent || force) {
+            // Update only if data is different or it's a forced manual load
+            if (isDifferent || (force && !silent)) {
                 processProkerData(result.data);
 
                 // Show notification if data changed in background
@@ -1155,32 +1208,11 @@ function sortProkerByMonth() {
     });
 }
 
-function setProkerView(view) {
-    currentProkerView = view;
-    document.querySelectorAll('#proker-section .view-btn').forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.view === view) {
-            btn.classList.add('active');
-        }
-    });
 
-    document.getElementById('proker-month-filter').style.display =
-        view === 'monthly' ? 'flex' : 'none';
-
-    document.getElementById('proker-monthly-view').style.display =
-        view === 'monthly' ? 'block' : 'none';
-    document.getElementById('proker-all-view').style.display =
-        view === 'all' ? 'block' : 'none';
-
-    renderProkerView();
-}
 
 function renderProkerView() {
-    if (currentProkerView === 'monthly') {
-        renderProkerMonthly();
-    } else if (currentProkerView === 'all') {
-        renderProkerTable();
-    }
+    // Force 'all' view since monthly is removed
+    renderProkerTable();
 }
 
 function renderProkerMonthly() {
@@ -1284,77 +1316,86 @@ function renderProkerTable() {
     const canEdit = currentMode === 'sc';
 
     if (filteredProker.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="loading">Tidak ada data</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="loading">Tidak ada data</td></tr>';
         return;
     }
 
-    if (canEdit) {
-        tbody.innerHTML = filteredProker.map((proker, index) => `
-            <tr class="${proker.statusSelesai ? 'status-success' : ''}" data-proker-id="${proker.id}" onclick="toggleProkerDetail('${proker.id}')" style="cursor: pointer;">
-                <td class="sc-only-header" onclick="event.stopPropagation();" style="text-align: center;">
-                    <input type="checkbox" class="proker-checkbox" value="${proker.id}" onchange="updateBulkActionUI()">
-                </td>
-                <td>${index + 1}</td>
-                <td>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <button class="detail-toggle-btn" onclick="event.stopPropagation(); toggleProkerDetail('${proker.id}')" id="detail-toggle-${proker.id}" title="Tampilkan detail">
-                            <span class="detail-toggle-icon">▼</span>
-                        </button>
-                        <span>${escapeHtml(proker.nama || '')}</span>
-                    </div>
-                </td>
-                <td onclick="event.stopPropagation();">${escapeHtml(proker.divisiId || '-')}</td>
-                <td onclick="event.stopPropagation();">${formatDate(proker.tanggal || '')}</td>
-                <td onclick="event.stopPropagation();">
-                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-                        <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; cursor: pointer;">
-                            <input type="checkbox" ${proker.proposal ? 'checked' : ''} onchange="updateProkerCheckbox('${proker.id}', 'proposal', this.checked)">
-                            <span>Proposal</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; cursor: pointer;">
-                            <input type="checkbox" ${proker.rak ? 'checked' : ''} onchange="updateProkerCheckbox('${proker.id}', 'rak', this.checked)">
-                            <span>RAK</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; cursor: pointer;">
-                            <input type="checkbox" ${proker.rab ? 'checked' : ''} onchange="updateProkerCheckbox('${proker.id}', 'rab', this.checked)">
-                            <span>RAB</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; cursor: pointer;">
-                            <input type="checkbox" ${proker.lpj ? 'checked' : ''} onchange="updateProkerCheckbox('${proker.id}', 'lpj', this.checked)">
-                            <span>LPJ</span>
-                        </label>
-                    </div>
-                </td>
-                <td onclick="event.stopPropagation();">
-                    <div class="btn-group">
-                        <button class="btn btn-edit" onclick="event.stopPropagation(); editProker('${proker.id}')">Edit</button>
-                        <button class="btn btn-danger" onclick="event.stopPropagation(); deleteProker('${proker.id}')">Hapus</button>
-                    </div>
-                </td>
-            </tr>
-        `).join('');
-    } else {
-        tbody.innerHTML = filteredProker.map((proker, index) => `
-            <tr class="${proker.statusSelesai ? 'status-success' : ''}" data-proker-id="${proker.id}" onclick="toggleProkerDetail('${proker.id}')" style="cursor: pointer;">
-                <td class="sc-only-header" style="display: none;"></td>
-                <td>${index + 1}</td>
-                <td>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <button class="detail-toggle-btn" onclick="event.stopPropagation(); toggleProkerDetail('${proker.id}')" id="detail-toggle-${proker.id}" title="Tampilkan detail">
-                            <span class="detail-toggle-icon">▼</span>
-                        </button>
-                        <a href="#" onclick="event.stopPropagation(); toggleProkerDetail('${proker.id}'); return false;" style="color: var(--primary-color); text-decoration: underline;">${escapeHtml(proker.nama || '')}</a>
-                    </div>
-                </td>
-                <td onclick="event.stopPropagation();">${escapeHtml(proker.divisiId || '-')}</td>
-                <td onclick="event.stopPropagation();">${formatDate(proker.tanggal || '')}</td>
-                <td onclick="event.stopPropagation();">${proker.statusSelesai ? '<span class="status-badge status-completed">Selesai</span>' : ''}</td>
-                <td onclick="event.stopPropagation();">
-                    <button class="btn btn-sm" style="background: var(--primary-color); color: white; padding: 0.5rem 1rem;" onclick="event.stopPropagation(); toggleProkerDetail('${proker.id}')">Detail</button>
-                </td>
-            </tr>
-        `).join('');
-    }
+    const rows = filteredProker.map((proker, index) => {
+        const isFinished = proker.statusSelesai;
+        const divisiName = divisiMap[proker.divisiId] || proker.divisiId || '-';
+        const picName = picMap[proker.picId]?.nama || proker.picId || '-';
+        const dateStr = formatDate(proker.tanggal || '');
+
+        if (canEdit) {
+            return `
+                <tr class="${isFinished ? 'status-success' : ''}" data-proker-id="${proker.id}" onclick="toggleProkerDetail('${proker.id}')" style="cursor: pointer;">
+                    <td class="sc-only-header" onclick="event.stopPropagation();" style="text-align: center;">
+                        <input type="checkbox" class="proker-checkbox" value="${proker.id}" onchange="updateBulkActionUI()">
+                    </td>
+                    <td>${index + 1}</td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <button class="detail-toggle-btn" onclick="event.stopPropagation(); toggleProkerDetail('${proker.id}')" id="detail-toggle-${proker.id}" title="Tampilkan detail">
+                                <i class="detail-toggle-icon fa-solid fa-chevron-down"></i>
+                            </button>
+                            <span>${escapeHtml(proker.nama || '')}</span>
+                        </div>
+                    </td>
+                    <td onclick="event.stopPropagation();">${escapeHtml(divisiName)}</td>
+                    <td onclick="event.stopPropagation();">${escapeHtml(picName)}</td>
+                    <td onclick="event.stopPropagation();">${dateStr}</td>
+                    <td onclick="event.stopPropagation();">
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+                            <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; cursor: pointer;">
+                                <input type="checkbox" ${proker.proposal ? 'checked' : ''} onchange="updateProkerCheckbox('${proker.id}', 'proposal', this.checked)">
+                                <span>Proposal</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; cursor: pointer;">
+                                <input type="checkbox" ${proker.rak ? 'checked' : ''} onchange="updateProkerCheckbox('${proker.id}', 'rak', this.checked)">
+                                <span>RAK</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; cursor: pointer;">
+                                <input type="checkbox" ${proker.rab ? 'checked' : ''} onchange="updateProkerCheckbox('${proker.id}', 'rab', this.checked)">
+                                <span>RAB</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; cursor: pointer;">
+                                <input type="checkbox" ${proker.lpj ? 'checked' : ''} onchange="updateProkerCheckbox('${proker.id}', 'lpj', this.checked)">
+                                <span>LPJ</span>
+                            </label>
+                        </div>
+                    </td>
+                    <td onclick="event.stopPropagation();">
+                        <div class="btn-group">
+                            <button class="btn btn-edit" onclick="event.stopPropagation(); editProker('${proker.id}')"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+                            <button class="btn btn-danger" onclick="event.stopPropagation(); deleteProker('${proker.id}')"><i class="fa-solid fa-trash-can"></i> Hapus</button>
+                        </div>
+                    </td>
+                </tr>`;
+        } else {
+            return `
+                <tr class="${isFinished ? 'status-success' : ''}" data-proker-id="${proker.id}" onclick="toggleProkerDetail('${proker.id}')" style="cursor: pointer;">
+                    <td class="sc-only-header" style="display: none;"></td>
+                    <td>${index + 1}</td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <button class="detail-toggle-btn" onclick="event.stopPropagation(); toggleProkerDetail('${proker.id}')" id="detail-toggle-${proker.id}" title="Tampilkan detail">
+                                <span class="detail-toggle-icon">▼</span>
+                            </button>
+                            <a href="#" onclick="event.stopPropagation(); toggleProkerDetail('${proker.id}'); return false;" style="color: var(--primary-color); text-decoration: underline;">${escapeHtml(proker.nama || '')}</a>
+                        </div>
+                    </td>
+                    <td onclick="event.stopPropagation();">${escapeHtml(divisiName)}</td>
+                    <td onclick="event.stopPropagation();">${escapeHtml(picName)}</td>
+                    <td onclick="event.stopPropagation();">${dateStr}</td>
+                    <td onclick="event.stopPropagation();">${isFinished ? '<span class="status-badge status-completed">Selesai</span>' : ''}</td>
+                    <td onclick="event.stopPropagation();">
+                        <button class="btn btn-sm" style="background: var(--primary-color); color: white; padding: 0.5rem 1rem;" onclick="event.stopPropagation(); toggleProkerDetail('${proker.id}')">Detail</button>
+                    </td>
+                </tr>`;
+        }
+    });
+
+    tbody.innerHTML = rows.join('');
 }
 
 function renderProkerCalendar() {
@@ -1523,35 +1564,35 @@ function changePengurusCalendarMonth(delta) {
     renderPengurusCalendar();
 }
 
-function filterProkerByMonth() {
-    const select = document.getElementById('proker-month-select');
-    currentProkerMonth = select.value || null;
-    renderProkerMonthly();
-}
+// Update filterProkerByMonth removed in favor of direct applyFilters call
+
 
 // Fungsi untuk apply filters dan render (untuk mengganti applyFilters yang hilang)
 function applyFilters() {
     const searchTerm = document.getElementById('proker-search')?.value.toLowerCase() || '';
-    const monthFilter = (currentProkerMonth !== null && currentProkerMonth !== "") ? parseInt(currentProkerMonth) : null;
+    const monthFilter = (currentProkerMonth !== null && currentProkerMonth !== "") ? parseInt(currentProkerMonth) :
+        (document.getElementById('proker-month-select')?.value !== "" ? parseInt(document.getElementById('proker-month-select')?.value) : null);
+    const divisiFilter = document.getElementById('proker-divisi-select')?.value || '';
 
     filteredProker = prokerData.filter(p => {
-        // 1. Check if active
         if (p.isActive === false) return false;
 
-        // 2. Filter by Month (if specified)
-        // Jika tidak ada data tanggal, proker akan tetap muncul di semua filter bulan agar tidak hilang
+        // Month Filter
         if (monthFilter !== null) {
-            if (p.dateObj && p.dateObj.getMonth() !== monthFilter) {
-                return false;
-            }
+            if (p.dateObj && p.dateObj.getMonth() !== monthFilter) return false;
         }
 
-        // 3. Filter by Search
+        // Division Filter
+        if (divisiFilter && p.divisiId !== divisiFilter) return false;
+
+        // Search Filter (enhanced O(1) lookup)
         if (searchTerm) {
+            const picInfo = picMap[p.picId];
+            const picName = picInfo ? picInfo.namaLower : '';
             const matches = (p.nama || '').toLowerCase().includes(searchTerm) ||
                 (p.id || '').toLowerCase().includes(searchTerm) ||
                 (p.divisiId || '').toLowerCase().includes(searchTerm) ||
-                (p.picId || '').toLowerCase().includes(searchTerm);
+                picName.includes(searchTerm);
             if (!matches) return false;
         }
 
@@ -1576,16 +1617,26 @@ function populateMonthFilters() {
 
     const now = new Date();
     const currentMonthIndex = now.getMonth();
+    // Proker Option: Add empty/all option first
+    const prokerAllOpt = document.createElement('option');
+    prokerAllOpt.value = "";
+    prokerAllOpt.textContent = "Semua Bulan";
+    prokerSelect.appendChild(prokerAllOpt);
+
+    // Konten Option: Add empty/all option first
+    const kontenAllOpt = document.createElement('option');
+    kontenAllOpt.value = "";
+    kontenAllOpt.textContent = "Semua Bulan";
+    kontenSelect.appendChild(kontenAllOpt);
+
+    currentProkerMonth = null; // Default to all
+    currentKontenMonth = null; // Reset initial state to be updated below
 
     monthNames.forEach((name, index) => {
         // Proker Option
         const optProker = document.createElement('option');
         optProker.value = index;
         optProker.textContent = name;
-        if (index === currentMonthIndex) {
-            optProker.selected = true;
-            currentProkerMonth = index.toString();
-        }
         prokerSelect.appendChild(optProker);
 
         // Konten Option
@@ -1600,7 +1651,7 @@ function populateMonthFilters() {
     });
 
     // Trigger filter jika sudah ada data
-    if (prokerData.length > 0) filterProkerByMonth();
+    if (prokerData.length > 0) applyFilters();
     if (kontenData.length > 0) filterKontenByMonth();
 }
 
@@ -1657,12 +1708,8 @@ function toggleProkerDetail(id) {
     const detailId = `proker-detail-${id}`;
 
     // Find the proker item based on current view to ensure we toggle the one in front of us
-    let prokerItem = null;
-    if (currentProkerView === 'monthly') {
-        prokerItem = document.querySelector(`#proker-monthly-content .month-item[data-proker-id="${id}"]`);
-    } else if (currentProkerView === 'all') {
-        prokerItem = document.querySelector(`#proker-tbody tr[data-proker-id="${id}"]`);
-    }
+    // Proker item is now always in the table (tbody) since monthly view is removed
+    const prokerItem = document.querySelector(`#proker-tbody tr[data-proker-id="${id}"]`);
 
     // If we have the proker item, check its immediate next sibling
     const detailElement = prokerItem ? prokerItem.nextElementSibling : null;
@@ -1685,8 +1732,7 @@ function toggleProkerDetail(id) {
             });
             // Ubah segitiga ke atas
             if (toggleIcon) {
-                toggleIcon.textContent = '▲';
-                toggleIcon.classList.add('open');
+                toggleIcon.className = 'detail-toggle-icon fa-solid fa-chevron-up open';
             }
         } else {
             // Tutup detail
@@ -1697,8 +1743,7 @@ function toggleProkerDetail(id) {
             }, 300);
             // Ubah segitiga ke bawah
             if (toggleIcon) {
-                toggleIcon.textContent = '▼';
-                toggleIcon.classList.remove('open');
+                toggleIcon.className = 'detail-toggle-icon fa-solid fa-chevron-down';
             }
         }
         return;
@@ -1738,7 +1783,7 @@ async function loadProkerDetailInline(id, proker) {
         const toggleBtn = document.getElementById(`detail-toggle-${id}`);
         const toggleIcon = toggleBtn?.querySelector('.detail-toggle-icon');
         if (toggleIcon && !toggleIcon.classList.contains('open')) {
-            toggleIcon.textContent = '▲';
+            toggleIcon.className = 'detail-toggle-icon fa-solid fa-chevron-up open';
             toggleIcon.classList.add('open');
         }
     } catch (error) {
@@ -1750,7 +1795,7 @@ async function loadProkerDetailInline(id, proker) {
         const toggleBtn = document.getElementById(`detail-toggle-${id}`);
         const toggleIcon = toggleBtn?.querySelector('.detail-toggle-icon');
         if (toggleIcon && !toggleIcon.classList.contains('open')) {
-            toggleIcon.textContent = '▲';
+            toggleIcon.className = 'detail-toggle-icon fa-solid fa-chevron-up open';
             toggleIcon.classList.add('open');
         }
     }
@@ -1767,14 +1812,22 @@ function renderProkerDetailInline(id, proker, rapatList, isUpdate = false) {
         <div class="proker-detail-content" style="padding: 1rem; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-color); overflow: hidden;">
             <h4 style="margin-top: 0; margin-bottom: 1rem;">Detail Proker</h4>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
-                <div>
-                    <strong>Nama Proker:</strong><br>
-                    <span>${escapeHtml(proker.nama || '-')}</span>
-                </div>
-                <div>
-                    <strong>Tanggal:</strong><br>
-                    <span>${formatDate(proker.tanggal) || '-'}</span>
-                </div>
+                <div\u003e
+                    <strong\u003eNama Proker:\u003c/strong\u003e<br\u003e
+                    <span\u003e${escapeHtml(proker.nama || '-')}\u003c/span\u003e
+                \u003c/div\u003e
+                <div\u003e
+                    <strong\u003eDivisi:\u003c/strong\u003e<br\u003e
+                    <span\u003e${escapeHtml(divisiMap[proker.divisiId] || proker.divisiId || '-')}\u003c/span\u003e
+                \u003c/div\u003e
+                <div\u003e
+                    <strong\u003ePIC Proker:\u003c/strong\u003e<br\u003e
+                    <span\u003e${escapeHtml(picMap[proker.picId]?.nama || proker.picId || '-')}\u003c/span\u003e
+                \u003c/div\u003e
+                <div\u003e
+                    <strong\u003eTanggal:\u003c/strong\u003e<br\u003e
+                    <span\u003e${formatDate(proker.tanggal) || '-'}\u003c/span\u003e
+                \u003c/div\u003e
                 <div>
                     <strong>Status:</strong><br>
                     <span class="status-badge ${proker.statusSelesai ? 'status-completed' : 'status-active'}">
@@ -1785,10 +1838,10 @@ function renderProkerDetailInline(id, proker, rapatList, isUpdate = false) {
             <div style="margin-bottom: 1rem;">
                 <strong>Progress:</strong><br>
                 <div style="display: flex; gap: 1rem; margin-top: 0.5rem; flex-wrap: wrap;">
-                    <span>Proposal: ${proker.proposal ? '✓' : '✗'}</span>
-                    <span>RAK: ${proker.rak ? '✓' : '✗'}</span>
-                    <span>RAB: ${proker.rab ? '✓' : '✗'}</span>
-                    <span>LPJ: ${proker.lpj ? '✓' : '✗'}</span>
+                    <span>Proposal: ${proker.proposal ? '<i class="fa-solid fa-circle-check" style="color: var(--success-color)"></i>' : '<i class="fa-solid fa-circle-xmark" style="color: var(--danger-color)"></i>'}</span>
+                    <span>RAK: ${proker.rak ? '<i class="fa-solid fa-circle-check" style="color: var(--success-color)"></i>' : '<i class="fa-solid fa-circle-xmark" style="color: var(--danger-color)"></i>'}</span>
+                    <span>RAB: ${proker.rab ? '<i class="fa-solid fa-circle-check" style="color: var(--success-color)"></i>' : '<i class="fa-solid fa-circle-xmark" style="color: var(--danger-color)"></i>'}</span>
+                    <span>LPJ: ${proker.lpj ? '<i class="fa-solid fa-circle-check" style="color: var(--success-color)"></i>' : '<i class="fa-solid fa-circle-xmark" style="color: var(--danger-color)"></i>'}</span>
                 </div>
             </div>
             ${rapatList === null ? `
@@ -1816,14 +1869,9 @@ function renderProkerDetailInline(id, proker, rapatList, isUpdate = false) {
     `;
 
     // Find the proker item based on current view
-    let prokerItem = null;
-    if (currentProkerView === 'monthly') {
-        const container = document.getElementById('proker-monthly-content');
-        prokerItem = container.querySelector(`.month-item[data-proker-id="${id}"]`);
-    } else if (currentProkerView === 'all') {
-        const tbody = document.getElementById('proker-tbody');
-        prokerItem = tbody.querySelector(`tr[data-proker-id="${id}"]`);
-    }
+    // Proker item is now always in the table (tbody) since monthly view is removed
+    const tbody = document.getElementById('proker-tbody');
+    const prokerItem = tbody.querySelector(`tr[data-proker-id="${id}"]`);
 
     if (!prokerItem) return;
 
@@ -1839,57 +1887,33 @@ function renderProkerDetailInline(id, proker, rapatList, isUpdate = false) {
         }, 300);
     } else if (existingDetail && isUpdate) {
         // Update mode: replace content but keep structure/animation state
-        if (prokerItem.tagName === 'TR') {
-            const cell = existingDetail.cells[0];
-            const detailDiv = cell.querySelector('.proker-detail-expanded'); // This is the animating div
-            detailDiv.innerHTML = html;
-            if (detailDiv.style.maxHeight !== '0px') {
-                detailDiv.style.maxHeight = detailDiv.scrollHeight + 'px';
-            }
-        } else {
-            existingDetail.innerHTML = html;
-            if (existingDetail.style.maxHeight !== '0px') {
-                existingDetail.style.maxHeight = existingDetail.scrollHeight + 'px';
-            }
+        const cell = existingDetail.cells[0];
+        const detailDiv = cell.querySelector('.proker-detail-expanded'); // This is the animating div
+        detailDiv.innerHTML = html;
+        if (detailDiv.style.maxHeight !== '0px') {
+            detailDiv.style.maxHeight = detailDiv.scrollHeight + 'px';
         }
     } else {
         // Insert detail after the item dengan animasi
-        if (prokerItem.tagName === 'TR') {
-            const tbody = prokerItem.parentElement;
-            const newRow = tbody.insertRow(prokerItem.sectionRowIndex + 1);
-            newRow.id = detailId;
-            const cell = newRow.insertCell(0);
-            cell.colSpan = 6;
-            cell.style.padding = '0';
-            const detailDiv = document.createElement('div');
-            detailDiv.className = 'proker-detail-expanded';
-            detailDiv.innerHTML = html;
-            detailDiv.style.maxHeight = '0px';
-            detailDiv.style.opacity = '0';
-            detailDiv.style.overflow = 'hidden';
-            cell.appendChild(detailDiv);
+        const tbody = prokerItem.parentElement;
+        const newRow = tbody.insertRow(prokerItem.sectionRowIndex + 1);
+        newRow.id = detailId;
+        const cell = newRow.insertCell(0);
+        cell.colSpan = 7; // Updated for all columns
+        cell.style.padding = '0';
+        const detailDiv = document.createElement('div');
+        detailDiv.className = 'proker-detail-expanded';
+        detailDiv.innerHTML = html;
+        detailDiv.style.maxHeight = '0px';
+        detailDiv.style.opacity = '0';
+        detailDiv.style.overflow = 'hidden';
+        cell.appendChild(detailDiv);
 
-            // Wait for next frame to start animation
-            setTimeout(() => {
-                detailDiv.style.maxHeight = detailDiv.scrollHeight + 'px';
-                detailDiv.style.opacity = '1';
-            }, 10);
-        } else {
-            const detailDiv = document.createElement('div');
-            detailDiv.id = detailId;
-            detailDiv.className = 'proker-detail-expanded';
-            detailDiv.innerHTML = html;
-            detailDiv.style.maxHeight = '0px';
-            detailDiv.style.opacity = '0';
-            detailDiv.style.overflow = 'hidden';
-            detailDiv.style.marginTop = '0.5rem';
-            prokerItem.insertAdjacentElement('afterend', detailDiv);
-
-            setTimeout(() => {
-                detailDiv.style.maxHeight = detailDiv.scrollHeight + 'px';
-                detailDiv.style.opacity = '1';
-            }, 10);
-        }
+        // Wait for next frame to start animation
+        setTimeout(() => {
+            detailDiv.style.maxHeight = detailDiv.scrollHeight + 'px';
+            detailDiv.style.opacity = '1';
+        }, 10);
     }
 }
 
@@ -2088,8 +2112,26 @@ async function processBulkProker() {
         const result = await response.json();
         if (result.success) {
             showToast(`${newProkers.length} Proker berhasil ditambahkan!`, 'success');
+
+            // Optimistic update for bulk add
+            if (result.data && Array.isArray(result.data)) {
+                result.data.forEach((res, i) => {
+                    if (res.success && res.data) {
+                        const optimisticProker = {
+                            ...newProkers[i],
+                            id: res.data.id,
+                            isActive: true,
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString()
+                        };
+                        prokerData.unshift(optimisticProker);
+                    }
+                });
+                processProkerData(prokerData);
+            }
+
             closeBulkProkerModal();
-            loadProkerData(true);
+            loadProkerData({ force: true, silent: true });
         } else {
             showToast('Gagal: ' + result.message, 'error');
         }
@@ -2396,11 +2438,7 @@ function setKontenView(view) {
         }
     });
 
-    document.getElementById('konten-month-filter').style.display =
-        view === 'monthly' ? 'flex' : 'none';
-
-    document.getElementById('konten-monthly-view').style.display =
-        view === 'monthly' ? 'block' : 'none';
+    // Both views use the same controls row now
     document.getElementById('konten-all-view').style.display =
         view === 'all' ? 'block' : 'none';
     document.getElementById('konten-calendar-view').style.display =
@@ -2410,81 +2448,14 @@ function setKontenView(view) {
 }
 
 function renderKontenView() {
-    if (currentKontenView === 'monthly') {
-        renderKontenMonthly();
-    } else if (currentKontenView === 'all') {
+    if (currentKontenView === 'all') {
         renderKontenTable();
     } else if (currentKontenView === 'calendar') {
         renderKontenCalendar();
     }
 }
 
-function renderKontenMonthly() {
-    const container = document.getElementById('konten-monthly-content');
 
-    // Filter berdasarkan bulan yang dipilih
-    let filtered = filteredKonten;
-    if (currentKontenMonth !== null && currentKontenMonth !== "") {
-        filtered = filteredKonten.filter(k => {
-            if (!k.dateObj) return false;
-            return k.dateObj.getMonth() === parseInt(currentKontenMonth);
-        });
-    }
-
-    const grouped = groupByMonth(filtered);
-
-    if (Object.keys(grouped).length === 0) {
-        container.innerHTML = '<div class="loading">Tidak ada data</div>';
-        return;
-    }
-
-    let html = '';
-    const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-
-    // Sort bulan dari terbaru ke terlama
-    const months = Object.keys(grouped).map(m => parseInt(m)).sort((a, b) => b - a);
-
-    months.forEach(monthIndex => {
-
-        const monthName = monthNames[monthIndex];
-        const monthData = grouped[monthIndex];
-
-        // Sort data dalam bulan berdasarkan tanggal (terbaru dulu)
-        monthData.sort((a, b) => {
-            if (!a.dateObj && !b.dateObj) return 0;
-            if (!a.dateObj) return 1;
-            if (!b.dateObj) return -1;
-            return b.dateObj - a.dateObj;
-        });
-
-        html += `
-            <div class="month-group">
-                <div class="month-header">
-                    <span>${monthName}</span>
-                    <span style="color: var(--text-secondary); font-size: 0.875rem;">
-                        ${monthData.length} konten
-                    </span>
-                </div>
-                <div class="month-content">
-                    ${monthData.map(konten => `
-                        <div class="month-item ${(konten.status || '').toLowerCase().includes('selesai') ? 'status-success' : ''}">
-                            <div class="month-item-header">
-                                <div class="month-item-title">${escapeHtml(konten.nama || '')}</div>
-                                <div class="month-item-meta">
-                                    <span>${formatDate(konten.tanggal || '')}</span>
-                                    ${konten.status ? `<span>${escapeHtml(konten.status)}</span>` : ''}
-                                </div>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
-    });
-
-    container.innerHTML = html;
-}
 
 function renderKontenTable() {
     const tbody = document.getElementById('konten-tbody');
@@ -2568,19 +2539,33 @@ function changeKontenCalendarMonth(delta) {
     renderKontenCalendar();
 }
 
+function applyKontenFilters() {
+    const searchTerm = document.getElementById('konten-search')?.value.toLowerCase() || '';
+    const monthFilter = document.getElementById('konten-month-select')?.value;
+
+    filteredKonten = kontenData.filter(konten => {
+        // Search Filter
+        const matchesSearch = !searchTerm || (konten.nama || '').toLowerCase().includes(searchTerm);
+
+        // Month Filter
+        let matchesMonth = true;
+        if (monthFilter !== "" && monthFilter !== null) {
+            matchesMonth = konten.dateObj && konten.dateObj.getMonth() === parseInt(monthFilter);
+        }
+
+        return matchesSearch && matchesMonth;
+    });
+
+    sortKontenByMonth();
+    renderKontenView();
+}
+
 function filterKontenByMonth() {
-    const select = document.getElementById('konten-month-select');
-    currentKontenMonth = select.value || null;
-    renderKontenMonthly();
+    applyKontenFilters();
 }
 
 function searchKonten() {
-    const searchTerm = document.getElementById('konten-search').value.toLowerCase();
-    filteredKonten = kontenData.filter(konten =>
-        (konten.nama || '').toLowerCase().includes(searchTerm)
-    );
-    sortKontenByMonth();
-    renderKontenView();
+    applyKontenFilters();
 }
 
 // ==================== SC FUNCTIONS ====================

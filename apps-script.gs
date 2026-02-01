@@ -107,6 +107,12 @@ function doGet(e) {
           success: true,
           data: getMasterRapat()
         })).setMimeType(ContentService.MimeType.JSON);
+
+      case 'getAllRapat':
+        return ContentService.createTextOutput(JSON.stringify({
+          success: true,
+          data: getAllRapatData()
+        })).setMimeType(ContentService.MimeType.JSON);
         
       case 'updatePresence':
         const scIdP = e.parameter.scId;
@@ -449,6 +455,46 @@ function getProkerData() {
   } catch (error) {
     Logger.log('Error getProkerData: ' + error.toString());
     throw error;
+  }
+}
+
+/**
+ * Get semua data rapat dari spreadsheet
+ */
+function getAllRapatData() {
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID_PROKER);
+    const sheet = ss.getSheetByName(SHEET_NAME_RAPAT_PROKER);
+    
+    if (!sheet) {
+      return [];
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return [];
+    
+    const rows = data.slice(1);
+    
+    return rows.map((row) => {
+      return {
+        rapatId: row[0] || '',
+        prokerId: row[1] || '',
+        namaProker: row[2] || '',
+        jenisRapat: row[3] || '',
+        tanggal: row[4] ? formatDateForOutput(row[4]) : '',
+        pic: row[5] || '',
+        picEmail: row[6] || '',
+        statusRapat: row[7] || false,
+        aktif: row[8]
+      };
+    }).filter(r => {
+      // Filter hanya yang aktif
+      const aktif = r.aktif;
+      return aktif === true || aktif === 'TRUE' || aktif === 'true' || aktif === 1;
+    });
+  } catch (error) {
+    Logger.log('Error getAllRapatData: ' + error.toString());
+    return [];
   }
 }
 

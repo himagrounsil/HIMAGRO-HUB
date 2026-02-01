@@ -1,10 +1,11 @@
 // Konfigurasi Apps Script URL
 // GANTI URL INI DENGAN URL APPS SCRIPT ANDA SETELAH DEPLOY
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw06g2lUUc2x1TeaBwub63rX9GLqDofcQxhJDgAWmXIF0tbzO1D527QAe2uSRi4pcsrkw/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbypDmX1m5XxqFsvqzpku_uO7h2rb9RpvmdsZYlJLI2bJVLeJhwx2ht6DtxUNifA8c0FRg/exec';
 
 // Data cache
 let prokerData = [];
 let kontenData = [];
+let rapatData = []; // New
 let scData = [];
 let filteredProker = [];
 let filteredKonten = [];
@@ -13,6 +14,8 @@ let masterPIC = [];
 let masterRapat = [];
 let divisiMap = {}; // Lookup Map for Divisi names
 let picMap = {};    // Lookup Map for PIC names
+let lastProkerDataHash = '';
+let lastRapatDataHash = ''; // New
 
 // State management
 let currentMode = 'staff'; // 'staff' or 'sc'
@@ -36,7 +39,7 @@ let rapatFormCounter = 0;
 let presenceInterval = null;
 let activeScInterval = null;
 let autoSyncInterval = null;
-let lastProkerDataHash = ''; // To detect changes without toast spam
+
 
 // ==================== SC PRESENCE POLLING ====================
 
@@ -128,19 +131,10 @@ function showCalendarDayDetails(dateString, type) {
             if (p.dateObj && isSameDay(p.dateObj, date) && p.isActive !== false) {
                 items.push({ nama: p.nama, meta: 'Program Kerja' });
             }
-            if (p.rapat) {
-                p.rapat.forEach(r => {
-                    let rDate = null;
-                    if (r.tanggal) {
-                        const parts = r.tanggal.split('/');
-                        if (parts.length === 3) {
-                            rDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-                        }
-                    }
-                    if (rDate && isSameDay(rDate, date)) {
-                        items.push({ nama: `${r.jenisRapat} (${p.nama || ''})`, meta: 'Rapat Pengurus' });
-                    }
-                });
+        });
+        rapatData.forEach(r => {
+            if (r.dateObj && isSameDay(r.dateObj, date)) {
+                items.push({ nama: `${r.jenisRapat} (${r.namaProker || ''})`, meta: 'Rapat Pengurus' });
             }
         });
     } else {
@@ -183,7 +177,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     try {
         await Promise.all([
             loadMasterData(),
-            loadProkerData({ force: false, silent: true }) // Silent true because we show manual loading here
+            loadProkerData({ force: false, silent: true }),
+            loadRapatData({ force: false, silent: true })
         ]);
 
         // First time onboarding check
@@ -218,6 +213,7 @@ function startGlobalSync() {
 
         // Background sync Proker
         await loadProkerData({ silent: true, force: true });
+        await loadRapatData({ silent: true, force: true });
 
         // Background sync Master data (PIC, Divisi, etc)
         await loadMasterData({ silent: true });
@@ -825,10 +821,13 @@ async function refreshData() {
     localStorage.removeItem('prokerDataCache_time');
     localStorage.removeItem('kontenDataCache');
     localStorage.removeItem('kontenDataCache_time');
+    localStorage.removeItem('rapatDataCache');
+    localStorage.removeItem('rapatDataCache_time');
     sessionStorage.clear();
 
     prokerData = [];
     kontenData = [];
+    rapatData = [];
     scData = [];
 
     try {
@@ -836,6 +835,7 @@ async function refreshData() {
         await Promise.all([
             loadMasterData({ silent: true }),
             loadProkerData({ force: true, silent: true }),
+            loadRapatData({ force: true, silent: true }),
             loadKontenData({ silent: true })
         ]);
         showToast('Data berhasil di-refresh!', 'success');
@@ -1171,6 +1171,65 @@ async function loadProkerData(options = {}) {
     }
 }
 
+async function loadRapatData(options = {}) {
+    const force = typeof options === 'boolean' ? options : (options.force || false);
+    const silent = options.silent || false;
+    const cacheKey = 'rapatDataCache';
+    const cacheTime = localStorage.getItem(cacheKey + '_time');
+    const now = Date.now();
+
+    // Use cache if valid and NOT forced
+    if (!force && cacheTime && (now - parseInt(cacheTime)) < 300000) {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+            try {
+                const cachedData = JSON.parse(cached);
+                processRapatData(cachedData);
+                console.log('Loaded rapat data from cache');
+                return;
+            } catch (e) { console.error('Error parsing rapat cache:', e); }
+        }
+    }
+
+    try {
+        const response = await fetch(`${APPS_SCRIPT_URL}?action=getAllRapat&_=${now}`);
+        const result = await response.json();
+
+        if (result.success) {
+            const currentHash = JSON.stringify(result.data);
+            const isDifferent = currentHash !== lastRapatDataHash;
+
+            if (isDifferent || (force && !silent)) {
+                processRapatData(result.data);
+                lastRapatDataHash = currentHash;
+                localStorage.setItem(cacheKey, currentHash);
+                localStorage.setItem(cacheKey + '_time', now.toString());
+            }
+        }
+    } catch (error) {
+        console.error('Error loading rapat:', error);
+    }
+}
+
+function processRapatData(data) {
+    rapatData = data.map(item => {
+        let dateObj = null;
+        if (item.tanggal) {
+            if (item.tanggal.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                const parts = item.tanggal.split('/');
+                dateObj = new Date(parts[2], parts[1] - 1, parts[0]);
+            } else {
+                dateObj = new Date(item.tanggal + 'T00:00:00');
+            }
+        }
+        return { ...item, dateObj: dateObj };
+    });
+
+    if (currentSection === 'pengurus') {
+        renderPengurusCalendar();
+    }
+}
+
 // Helper to process and render proker data
 function processProkerData(data) {
     prokerData = data.map(item => {
@@ -1197,6 +1256,10 @@ function processProkerData(data) {
     filteredProker = [...prokerData];
     sortProkerByMonth();
     applyFilters(); // This will trigger renderProkerView
+
+    if (currentSection === 'pengurus') {
+        renderPengurusCalendar();
+    }
 }
 
 function sortProkerByMonth() {
@@ -1506,26 +1569,16 @@ function renderPengurusCalendar() {
                     id: p.id
                 });
             }
+        });
 
-            // 2. Rapats
-            if (p.rapat && Array.isArray(p.rapat)) {
-                p.rapat.forEach(r => {
-                    // Try to parse rapat date (usually DD/MM/YYYY)
-                    let rDate = null;
-                    if (r.tanggal) {
-                        const parts = r.tanggal.split('/');
-                        if (parts.length === 3) {
-                            rDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-                        }
-                    }
-                    if (rDate && !isNaN(rDate.getTime()) && isSameDay(rDate, currentDate)) {
-                        items.push({
-                            type: 'rapat',
-                            nama: `${r.jenisRapat} (${p.nama || ''})`,
-                            statusSelesai: false,
-                            id: p.id
-                        });
-                    }
+        // 2. Rapats
+        rapatData.forEach(r => {
+            if (r.dateObj && !isNaN(r.dateObj.getTime()) && isSameDay(r.dateObj, currentDate)) {
+                items.push({
+                    type: 'rapat',
+                    nama: `${r.jenisRapat} (${r.namaProker || ''})`,
+                    statusSelesai: r.statusRapat === true || r.statusRapat === 'TRUE' || r.statusRapat === 'true',
+                    id: r.prokerId
                 });
             }
         });

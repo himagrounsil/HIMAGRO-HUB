@@ -1,6 +1,6 @@
 // Konfigurasi Apps Script URL
 // GANTI URL INI DENGAN URL APPS SCRIPT ANDA SETELAH DEPLOY
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbypDmX1m5XxqFsvqzpku_uO7h2rb9RpvmdsZYlJLI2bJVLeJhwx2ht6DtxUNifA8c0FRg/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxsamlYnc3uomGJSP61KNF7MdEwVUjRxcfEEN3x3JSPqLYofvdKQL8oW8uKOA9p8-JQJw/exec';
 
 // Data cache
 let prokerData = [];
@@ -16,6 +16,7 @@ let divisiMap = {}; // Lookup Map for Divisi names
 let picMap = {};    // Lookup Map for PIC names
 let lastProkerDataHash = '';
 let lastRapatDataHash = ''; // New
+let lastKontenDataHash = ''; // New
 
 // State management
 let currentMode = 'staff'; // 'staff' or 'sc'
@@ -178,7 +179,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         await Promise.all([
             loadMasterData(),
             loadProkerData({ force: false, silent: true }),
-            loadRapatData({ force: false, silent: true })
+            loadRapatData({ force: false, silent: true }),
+            tryRestoreSession() // New: Restore SC session if remembered
         ]);
 
         // First time onboarding check
@@ -211,13 +213,16 @@ function startGlobalSync() {
         // Only sync if tab is visible to save resources (optional but good)
         if (document.hidden) return;
 
-        // Background sync Proker
+        // Background sync Proker & Rapat
         await loadProkerData({ silent: true, force: true });
         await loadRapatData({ silent: true, force: true });
 
+        // Background sync Konten
+        await loadKontenData({ silent: true, force: true });
+
         // Background sync Master data (PIC, Divisi, etc)
         await loadMasterData({ silent: true });
-    }, 20000); // Poll every 20 seconds
+    }, 10000); // Poll every 10 seconds for real-time feel
 }
 
 // ==================== MASTER DATA ====================
@@ -934,7 +939,7 @@ async function loginSC(event) {
                 switchSection('proker');
             }
 
-            setProkerView('all'); // Otomatis ke view 'Semua' saat login
+            renderProkerView(); // Re-render table with SC buttons if already in proker section
             showToast('Berhasil masuk Mode SC! Selamat datang, ' + result.data.nama, 'success');
         } else {
             showToast(result.data?.message || 'Username atau password salah!', 'error');
@@ -955,6 +960,36 @@ function logoutSC() {
     // Switch back to proker section if currently viewing SC
     if (currentSection !== 'proker' && currentSection !== 'konten') {
         switchSection('proker');
+    }
+}
+
+async function tryRestoreSession() {
+    const creds = localStorage.getItem('sc_creds');
+    if (!creds) return;
+
+    try {
+        const { u, p } = JSON.parse(creds);
+        const password = atob(p);
+
+        const response = await fetch(`${APPS_SCRIPT_URL}?action=validateLogin&username=${encodeURIComponent(u)}&password=${encodeURIComponent(password)}`);
+        const result = await response.json();
+
+        if (result.success && result.data.valid) {
+            currentUser = {
+                username: result.data.username,
+                scId: result.data.scId,
+                nama: result.data.nama,
+                email: result.data.email,
+                jabatan: result.data.jabatan
+            };
+            currentMode = 'sc';
+            updateModeDisplay();
+            console.log('Session restored for:', currentUser.nama);
+        } else {
+            localStorage.removeItem('sc_creds');
+        }
+    } catch (e) {
+        console.error('Failed to restore session:', e);
     }
 }
 
@@ -1153,7 +1188,7 @@ async function loadProkerData(options = {}) {
 
                 // Show notification if data changed in background
                 if (silent && isDifferent && lastProkerDataHash !== '') {
-                    showToast('Data baru sudah terupdate otomatis', 'success');
+                    // Silent update, no toast to keep it seamless
                 }
 
                 lastProkerDataHash = currentHash;
@@ -2395,82 +2430,69 @@ async function deleteProker(id) {
 
 // ==================== KONTEN KOMINFO FUNCTIONS (READ ONLY) ====================
 
-async function loadKontenData() {
-    // Cek cache dulu
+async function loadKontenData(options = {}) {
+    const silent = options.silent || false;
+    const force = options.force || false;
     const cacheKey = 'kontenDataCache';
     const cacheTime = localStorage.getItem(cacheKey + '_time');
     const now = Date.now();
 
-    // Gunakan cache jika masih valid (5 menit)
-    if (cacheTime && (now - parseInt(cacheTime)) < 300000) {
+    // Use cache if available and NOT forced
+    if (!force && cacheTime && (now - parseInt(cacheTime)) < 300000) {
         const cached = localStorage.getItem(cacheKey);
         if (cached) {
             try {
                 const cachedData = JSON.parse(cached);
-                kontenData = cachedData.map(item => {
-                    let dateObj = null;
-                    if (item.tanggal) {
-                        if (item.tanggal.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-                            const parts = item.tanggal.split('/');
-                            dateObj = new Date(parts[2], parts[1] - 1, parts[0]);
-                        } else {
-                            dateObj = new Date(item.tanggal + 'T00:00:00');
-                        }
-                    }
-                    return { ...item, dateObj: dateObj };
-                });
-                filteredKonten = [...kontenData];
-                sortKontenByMonth();
-                renderKontenView();
-                populateMonthFilters();
+                processKontenData(cachedData);
                 console.log('Loaded konten data from cache');
-                return; // Return early jika menggunakan cache
-            } catch (e) {
-                console.error('Error parsing cache:', e);
-            }
+                return;
+            } catch (e) { console.error('Error parsing cache:', e); }
         }
     }
 
-    // Jika tidak ada cache atau cache expired, load dari server
-    showLoading('Sedang memuat data konten...');
+    if (!silent) showLoading('Sedang memuat data konten...');
     try {
         const response = await fetch(`${APPS_SCRIPT_URL}?action=getKonten&_=${now}`);
         const result = await response.json();
 
         if (result.success) {
-            kontenData = result.data.map(item => {
-                // Handle format DD/MM/YYYY untuk tanggal
-                let dateObj = null;
-                if (item.tanggal) {
-                    if (item.tanggal.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-                        const parts = item.tanggal.split('/');
-                        dateObj = new Date(parts[2], parts[1] - 1, parts[0]);
-                    } else {
-                        dateObj = new Date(item.tanggal + 'T00:00:00');
-                    }
-                }
-                return {
-                    ...item,
-                    dateObj: dateObj
-                };
-            });
-            filteredKonten = [...kontenData];
-            sortKontenByMonth();
-            renderKontenView();
-            populateMonthFilters();
+            const currentHash = JSON.stringify(result.data);
+            const isDifferent = currentHash !== lastKontenDataHash;
 
-            // Simpan ke cache
-            localStorage.setItem(cacheKey, JSON.stringify(result.data));
-            localStorage.setItem(cacheKey + '_time', now.toString());
-        } else {
+            if (isDifferent || (force && !silent)) {
+                processKontenData(result.data);
+                lastKontenDataHash = currentHash;
+                localStorage.setItem(cacheKey, currentHash);
+                localStorage.setItem(cacheKey + '_time', now.toString());
+            }
+        } else if (!silent) {
             showToast('Gagal memuat data Konten: ' + result.message, 'error');
         }
     } catch (error) {
-        showToast('Error: ' + error.message, 'error');
+        if (!silent) showToast('Error: ' + error.message, 'error');
         console.error('Error loading konten:', error);
     } finally {
-        hideLoading();
+        if (!silent) hideLoading();
     }
+}
+
+function processKontenData(data) {
+    kontenData = data.map(item => {
+        let dateObj = null;
+        if (item.tanggal) {
+            if (item.tanggal.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                const parts = item.tanggal.split('/');
+                dateObj = new Date(parts[2], parts[1] - 1, parts[0]);
+            } else {
+                dateObj = new Date(item.tanggal + 'T00:00:00');
+            }
+        }
+        return { ...item, dateObj: dateObj };
+    });
+    filteredKonten = [...kontenData];
+    sortKontenByMonth();
+    renderKontenView();
+    populateMonthFilters();
 }
 
 function sortKontenByMonth() {

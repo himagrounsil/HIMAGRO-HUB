@@ -1,4 +1,4 @@
-const CACHE_NAME = 'himagro-hub-v2';
+const CACHE_NAME = 'himagro-hub-v3';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -40,26 +40,25 @@ self.addEventListener('activate', (event) => {
     self.clients.claim();
 });
 
-// Fetch Event - Serve from Cache, then Network
+// Fetch Event - Network First Strategy
 self.addEventListener('fetch', (event) => {
-    // Skip cross-origin requests specifically for Google Apps Script to avoid CORS issues in strict mode
-    // But usually we just let them pass through. 
-    // We mainly want to cache local assets.
-
     if (event.request.url.startsWith('chrome-extension')) return;
 
+    // Strategy: Network First
+    // Sangat penting untuk aplikasi yang sering update agar user tidak terjebak di versi lama
     event.respondWith(
-        caches.match(event.request).then((response) => {
-            // Return cached response if found
-            if (response) {
+        fetch(event.request)
+            .then((response) => {
+                // Simpan copy ke cache jika berhasil
+                const responseClone = response.clone();
+                caches.open(CACHE_NAME).then((cache) => {
+                    cache.put(event.request, responseClone);
+                });
                 return response;
-            }
-
-            // Otherwise fetch from network
-            return fetch(event.request).catch(() => {
-                // Fallback or offline page logic can go here
-                // For now, if offline and not in cache, it typically fails
-            });
-        })
+            })
+            .catch(() => {
+                // Jika network gagal (offline), ambil dari cache
+                return caches.match(event.request);
+            })
     );
 });

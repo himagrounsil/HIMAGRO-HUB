@@ -30,6 +30,36 @@ const SHEET_NAME_ACTIVE_SESSIONS = 'Active_Sessions';
 // Nama sheet di Spreadsheet Konten
 const SHEET_NAME_CONTENT_PLANNER = 'Content Planner';
 
+// ==================== GLOBAL HELPERS ====================
+
+/**
+ * Mendapatkan index kolom berdasarkan nama header (case-insensitive)
+ */
+function getColumnIndex(headers, columnName) {
+  const index = headers.findIndex(h => String(h).trim().toLowerCase() === columnName.toLowerCase());
+  if (index === -1) {
+    Logger.log('Column not found: ' + columnName);
+  }
+  return index;
+}
+
+/**
+ * Konversi baris data menjadi objek berdasarkan mapping headers
+ */
+function rowToObject(row, headers, mapping) {
+  const obj = {};
+  for (const key in mapping) {
+    const colName = mapping[key];
+    const index = getColumnIndex(headers, colName);
+    if (index !== -1) {
+      obj[key] = row[index];
+    } else {
+      obj[key] = null;
+    }
+  }
+  return obj;
+}
+
 // ==================== DOGET - HANDLE GET REQUESTS ====================
 function doGet(e) {
   // Handle jika e atau e.parameter undefined
@@ -427,31 +457,44 @@ function getProkerData() {
     }
     
     const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return [];
     
-    // Skip header row
-    if (data.length <= 1) {
-      return [];
-    }
-    
+    const headers = data[0];
     const rows = data.slice(1);
     
-    return rows.map((row, index) => {
+    // Mapping internal key -> Nama Kolom di Spreadsheet
+    const mapping = {
+      id: 'Proker_ID',
+      nama: 'Nama_Proker',
+      divisiId: 'Divisi_ID',
+      picId: 'PIC_ID',
+      tanggal: 'Tanggal_Pelaksana',
+      proposal: 'Proposal',
+      rak: 'RAK',
+      rab: 'RAB',
+      lpj: 'LPJ',
+      statusSelesai: 'Status_Selesai',
+      isActive: 'Is_Active',
+      createdAt: 'Created_At',
+      updatedAt: 'Updated_At'
+    };
+    
+    return rows.map(row => {
+      const obj = rowToObject(row, headers, mapping);
       return {
-        id: row[0] || '', // Proker_ID
-        nama: row[1] || '', // Nama_Proker
-        divisiId: row[2] || '', // Divisi_ID
-        picId: row[3] || '', // PIC_ID
-        tanggal: row[4] ? formatDateForOutput(row[4]) : '', // Tanggal_Pelaksana
-        proposal: row[5] || false, // Proposal (checkbox)
-        rak: row[6] || false, // RAK (checkbox)
-        rab: row[7] || false, // RAB (checkbox)
-        lpj: row[8] || false, // LPJ (checkbox)
-        statusSelesai: row[9] || false, // Status_Selesai (checkbox)
-        isActive: row[10] || false, // Is_Active (checkbox)
-        createdAt: row[11] ? formatDateForOutput(row[11]) : '', // Created_At
-        updatedAt: row[12] ? formatDateForOutput(row[12]) : '' // Updated_At
+        ...obj,
+        tanggal: obj.tanggal ? formatDateForOutput(obj.tanggal) : '',
+        createdAt: obj.createdAt ? formatDateForOutput(obj.createdAt) : '',
+        updatedAt: obj.updatedAt ? formatDateForOutput(obj.updatedAt) : '',
+        // Pastikan boolean
+        proposal: Boolean(obj.proposal),
+        rak: Boolean(obj.rak),
+        rab: Boolean(obj.rab),
+        lpj: Boolean(obj.lpj),
+        statusSelesai: Boolean(obj.statusSelesai),
+        isActive: Boolean(obj.isActive)
       };
-    }).filter(row => row.id && row.nama); // Filter hanya yang memiliki ID dan Nama (row yang tidak kosong)
+    }).filter(row => row.id && row.nama);
   } catch (error) {
     Logger.log('Error getProkerData: ' + error.toString());
     throw error;
@@ -473,19 +516,27 @@ function getAllRapatData() {
     const data = sheet.getDataRange().getValues();
     if (data.length <= 1) return [];
     
+    const headers = data[0];
     const rows = data.slice(1);
     
-    return rows.map((row) => {
+    const mapping = {
+      rapatId: 'RAPAT_ID',
+      prokerId: 'PROKER_ID',
+      namaProker: 'NAMA_PROKER',
+      jenisRapat: 'JENIS_RAPAT',
+      tanggal: 'TANGGAL_RAP',
+      pic: 'PIC',
+      picEmail: 'PIC_EMAIL',
+      statusRapat: 'STATUS_RAPAT',
+      aktif: 'AKTIF'
+    };
+    
+    return rows.map(row => {
+      const obj = rowToObject(row, headers, mapping);
       return {
-        rapatId: row[0] || '',
-        prokerId: row[1] || '',
-        namaProker: row[2] || '',
-        jenisRapat: row[3] || '',
-        tanggal: row[4] ? formatDateForOutput(row[4]) : '',
-        pic: row[5] || '',
-        picEmail: row[6] || '',
-        statusRapat: row[7] || false,
-        aktif: row[8]
+        ...obj,
+        tanggal: obj.tanggal ? formatDateForOutput(obj.tanggal) : '',
+        statusRapat: Boolean(obj.statusRapat)
       };
     }).filter(r => {
       // Filter hanya yang aktif

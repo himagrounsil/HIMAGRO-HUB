@@ -35,11 +35,21 @@ let currentPengurusCalendarMonth = new Date().getMonth();
 let currentPengurusCalendarYear = new Date().getFullYear();
 let bulkProkerCounter = 0;
 let rapatFormCounter = 0;
+let lastActivityTime = Date.now(); // New: For idle timeout
+const IDLE_TIMEOUT = 30 * 60 * 1000; // 30 minutes in ms
 
 // Polling intervals for SC indicator
 let presenceInterval = null;
 let activeScInterval = null;
 let autoSyncInterval = null;
+let idleInterval = null; // New
+
+// Add activity listeners
+['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'].forEach(name => {
+    document.addEventListener(name, () => {
+        lastActivityTime = Date.now();
+    });
+});
 
 
 // ==================== SC PRESENCE POLLING ====================
@@ -50,10 +60,21 @@ function startSCPolling() {
     // Ping immediately
     updatePresencePing();
     fetchActiveSCs();
+    lastActivityTime = Date.now(); // Reset activity on start
 
     // SC-specific intervals (Presence & Active list)
     presenceInterval = setInterval(updatePresencePing, 60000); // Ping presence every 1 min
     activeScInterval = setInterval(fetchActiveSCs, 30000);     // Active icons list every 30 sec
+
+    // Idle timeout check
+    if (idleInterval) clearInterval(idleInterval);
+    idleInterval = setInterval(() => {
+        if (currentMode === 'sc' && (Date.now() - lastActivityTime) > IDLE_TIMEOUT) {
+            console.log('Idle timeout reached. Logging out...');
+            logoutSC();
+            showToast('Anda telah otomatis keluar karena tidak ada aktivitas', 'info');
+        }
+    }, 60000); // Check every 1 minute
 }
 
 function stopSCPolling() {
@@ -64,6 +85,10 @@ function stopSCPolling() {
     if (activeScInterval) {
         clearInterval(activeScInterval);
         activeScInterval = null;
+    }
+    if (idleInterval) {
+        clearInterval(idleInterval);
+        idleInterval = null;
     }
 }
 
@@ -179,8 +204,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         await Promise.all([
             loadMasterData(),
             loadProkerData({ force: false, silent: true }),
-            loadRapatData({ force: false, silent: true }),
-            tryRestoreSession() // New: Restore SC session if remembered
+            loadRapatData({ force: false, silent: true })
         ]);
 
         // First time onboarding check
@@ -963,35 +987,7 @@ function logoutSC() {
     }
 }
 
-async function tryRestoreSession() {
-    const creds = localStorage.getItem('sc_creds');
-    if (!creds) return;
 
-    try {
-        const { u, p } = JSON.parse(creds);
-        const password = atob(p);
-
-        const response = await fetch(`${APPS_SCRIPT_URL}?action=validateLogin&username=${encodeURIComponent(u)}&password=${encodeURIComponent(password)}`);
-        const result = await response.json();
-
-        if (result.success && result.data.valid) {
-            currentUser = {
-                username: result.data.username,
-                scId: result.data.scId,
-                nama: result.data.nama,
-                email: result.data.email,
-                jabatan: result.data.jabatan
-            };
-            currentMode = 'sc';
-            updateModeDisplay();
-            console.log('Session restored for:', currentUser.nama);
-        } else {
-            localStorage.removeItem('sc_creds');
-        }
-    } catch (e) {
-        console.error('Failed to restore session:', e);
-    }
-}
 
 function updateModeDisplay() {
     const modeBadge = document.getElementById('current-mode');

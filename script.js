@@ -24,7 +24,7 @@ let currentUser = null; // { username, password }
 let pendingChanges = {}; // { prokerId: { field: value } }
 let currentSection = 'proker'; // 'proker' or 'konten'
 let currentProkerView = 'all'; // Default now to 'all' as requested
-let currentKontenView = 'monthly'; // 'monthly', 'all', 'calendar'
+let currentKontenView = 'all'; // Adjusted to match HTML default 'all'
 let currentProkerMonth = null;
 let currentKontenMonth = null;
 let currentCalendarMonth = new Date().getMonth();
@@ -1152,15 +1152,16 @@ async function switchSection(section) {
 
     // Lazy load konten data hanya saat user klik section konten
     if (section === 'konten' && kontenData.length === 0) {
-        showLoading();
+        showLoading('Memuat data konten...');
         try {
-            await loadKontenData();
-            populateMonthFilters(); // Update month filters setelah konten data loaded
+            await loadKontenData({ silent: true }); // loadKontenData will call processKontenData -> render
+            // processKontenData already calls render and populateMonthFilters
         } catch (error) {
             console.error('Error loading konten data:', error);
         } finally {
             hideLoading();
         }
+        return; // processKontenData will handle the render
     }
 
     // Render sesuai section
@@ -2528,9 +2529,9 @@ function processKontenData(data) {
         }
         return { ...item, dateObj: dateObj };
     });
-    filteredKonten = [...kontenData];
-    sortKontenByMonth();
-    renderKontenView();
+
+    // Instead of just copying, apply the current filters immediately
+    // This will also call renderKontenView() and populateMonthFilters()
     populateMonthFilters();
 }
 
@@ -2650,12 +2651,31 @@ function changeKontenCalendarMonth(delta) {
         currentKontenCalendarMonth = 0;
         currentKontenCalendarYear++;
     }
-    renderKontenCalendar();
+
+    // Sinkronisasi dengan dropdown month filter
+    const monthSelect = document.getElementById('konten-month-select');
+    if (monthSelect) {
+        monthSelect.value = currentKontenCalendarMonth;
+        // Kita panggil applyKontenFilters agar filteredKonten diupdate ke bulan baru
+        applyKontenFilters();
+    } else {
+        renderKontenCalendar();
+    }
 }
 
 function applyKontenFilters() {
     const searchTerm = document.getElementById('konten-search')?.value.toLowerCase() || '';
-    const monthFilter = document.getElementById('konten-month-select')?.value;
+    const monthSelect = document.getElementById('konten-month-select');
+    const monthFilter = monthSelect?.value;
+
+    // Jika sedang di mode kalender dan dropdown diubah ke bulan spesifik, 
+    // sinkronkan currentKontenCalendarMonth
+    if (currentKontenView === 'calendar' && monthFilter !== "" && monthFilter !== null) {
+        const targetMonth = parseInt(monthFilter);
+        if (currentKontenCalendarMonth !== targetMonth) {
+            currentKontenCalendarMonth = targetMonth;
+        }
+    }
 
     filteredKonten = kontenData.filter(konten => {
         // Search Filter

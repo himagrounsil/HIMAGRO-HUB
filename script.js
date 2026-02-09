@@ -335,14 +335,18 @@ function updatePicMap() {
 }
 
 function populateDivisiDropdown() {
-    const select = document.getElementById('proker-divisi-id');
-    if (!select) return;
+    const selectForm = document.getElementById('proker-divisi-id');
+    const selectFilter = document.getElementById('proker-divisi-select');
 
-    const selects = [select, document.getElementById('proker-divisi-select')];
+    const selects = [selectForm, selectFilter];
 
     selects.forEach(sel => {
         if (!sel) return;
+
+        // SIMPAN nilai yang sedang dipilih agar tidak ter-reset saat background refresh
+        const currentValue = sel.value;
         const isFilter = sel.id === 'proker-divisi-select';
+
         sel.innerHTML = isFilter ? '<option value="">Semua Divisi</option>' : '<option value="">Pilih Divisi</option>';
 
         masterDivisi.forEach(divisi => {
@@ -351,6 +355,11 @@ function populateDivisiDropdown() {
             option.textContent = divisi.namaDivisi ? `${divisi.namaDivisi} (${divisi.divisiId})` : divisi.divisiId;
             sel.appendChild(option);
         });
+
+        // KEMBALIKAN nilai yang dipilih tadi
+        if (currentValue) {
+            sel.value = currentValue;
+        }
     });
 }
 
@@ -359,11 +368,23 @@ function populatePICDropdown(filterDivisiId = null) {
     const select = document.getElementById('proker-pic-id');
     if (!select) return;
 
-    // Jika Divisi belum dipilih, reset dan tampilkan pesan
+    // Jika filterDivisiId null (misal dipanggil dari background sync),
+    // coba ambil dari nilai divisi yang sedang dipilih di form
+    if (filterDivisiId === null) {
+        const divSelect = document.getElementById('proker-divisi-id');
+        if (divSelect && divSelect.value) {
+            filterDivisiId = divSelect.value;
+        }
+    }
+
+    // Jika tetap null (belum pilih divisi), reset pesan
     if (!filterDivisiId) {
         select.innerHTML = '<option value="">Pilih Divisi Terlebih Dahulu</option>';
         return;
     }
+
+    // SIMPAN nilai PIC yang sedang dipilih agar tidak ter-reset
+    const currentPicValue = select.value;
 
     // Clear existing options except first
     select.innerHTML = '<option value="">Pilih PIC</option>';
@@ -391,6 +412,11 @@ function populatePICDropdown(filterDivisiId = null) {
         option.textContent = `${pic.namaPic} (${pic.picId})`;
         select.appendChild(option);
     });
+
+    // KEMBALIKAN nilai PIC yang dipilih tadi
+    if (currentPicValue) {
+        select.value = currentPicValue;
+    }
 }
 
 // ... existing code ...
@@ -1693,6 +1719,10 @@ function populateMonthFilters() {
 
     if (!prokerSelect || !kontenSelect) return;
 
+    // SIMPAN nilai yang sedang dipilih user agar tidak reset saat background refresh
+    const prevProkerVal = prokerSelect.value;
+    const prevKontenVal = kontenSelect.value;
+
     const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
         'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
@@ -1701,6 +1731,7 @@ function populateMonthFilters() {
 
     const now = new Date();
     const currentMonthIndex = now.getMonth();
+
     // Proker Option: Add empty/all option first
     const prokerAllOpt = document.createElement('option');
     prokerAllOpt.value = "";
@@ -1713,9 +1744,6 @@ function populateMonthFilters() {
     kontenAllOpt.textContent = "Semua Bulan";
     kontenSelect.appendChild(kontenAllOpt);
 
-    currentProkerMonth = null; // Default to all
-    currentKontenMonth = null; // Reset initial state to be updated below
-
     monthNames.forEach((name, index) => {
         // Proker Option
         const optProker = document.createElement('option');
@@ -1727,12 +1755,27 @@ function populateMonthFilters() {
         const optKonten = document.createElement('option');
         optKonten.value = index;
         optKonten.textContent = name;
-        if (index === currentMonthIndex) {
-            optKonten.selected = true;
-            currentKontenMonth = index.toString();
-        }
         kontenSelect.appendChild(optKonten);
     });
+
+    // KEMBALIKAN nilai yang dipilih tadi
+    // Jika sebelumnya ada pilihan, pakai itu. Jika tidak (load pertama), biarkan default.
+    if (prevProkerVal !== undefined && prevProkerVal !== null && prevProkerVal !== "") {
+        prokerSelect.value = prevProkerVal;
+    } else {
+        prokerSelect.value = ""; // Default "Semua Bulan"
+    }
+
+    if (prevKontenVal !== undefined && prevKontenVal !== null && prevKontenVal !== "") {
+        kontenSelect.value = prevKontenVal;
+    } else {
+        // Khusus konten, jika baru pertama load (prevKontenVal kosong), default ke bulan sekarang
+        kontenSelect.value = currentMonthIndex.toString();
+    }
+
+    // Sync variabel global
+    currentProkerMonth = prokerSelect.value === "" ? null : prokerSelect.value;
+    currentKontenMonth = kontenSelect.value === "" ? null : kontenSelect.value;
 
     // Trigger filter jika sudah ada data
     if (prokerData.length > 0) applyFilters();

@@ -1,6 +1,6 @@
 // Konfigurasi Apps Script URL
 // GANTI URL INI DENGAN URL APPS SCRIPT ANDA SETELAH DEPLOY
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxsamlYnc3uomGJSP61KNF7MdEwVUjRxcfEEN3x3JSPqLYofvdKQL8oW8uKOA9p8-JQJw/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwJo5u7rVALVm4zMDPhrd0XfdXcFkjn__YbsSqC1PE-1u2UDQpOeziRHyuWcCWOLtIa0w/exec';
 
 // Data cache
 let prokerData = [];

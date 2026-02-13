@@ -36,9 +36,18 @@ const SHEET_NAME_CONTENT_PLANNER = 'Content Planner';
  * Mendapatkan index kolom berdasarkan nama header (case-insensitive)
  */
 function getColumnIndex(headers, columnName) {
-  const index = headers.findIndex(h => String(h).trim().toLowerCase() === columnName.toLowerCase());
+  if (!headers || !Array.isArray(headers)) {
+    Logger.log('ERROR: getColumnIndex called with invalid headers: ' + typeof headers + '. Target: ' + columnName);
+    return -1;
+  }
+  
+  const normalize = (s) => String(s || '').trim().toLowerCase().replace(/[_\s]/g, '');
+  const target = normalize(columnName);
+  
+  const index = headers.findIndex(h => normalize(h) === target);
+  
   if (index === -1) {
-    Logger.log('Column not found: ' + columnName);
+    Logger.log('Column not found: ' + columnName + '. Headers available: ' + JSON.stringify(headers));
   }
   return index;
 }
@@ -48,15 +57,26 @@ function getColumnIndex(headers, columnName) {
  */
 function rowToObject(row, headers, mapping) {
   const obj = {};
-  for (const key in mapping) {
+  if (!row || !Array.isArray(row)) return obj;
+  if (!headers || !Array.isArray(headers)) {
+    Logger.log('WARNING: rowToObject called with invalid headers: ' + typeof headers);
+    return obj;
+  }
+  if (!mapping || typeof mapping !== 'object') return obj;
+  
+  Object.keys(mapping).forEach(key => {
     const colName = mapping[key];
+    if (colName === undefined) {
+      Logger.log('WARNING: mapping key "' + key + '" has undefined value');
+      return;
+    }
     const index = getColumnIndex(headers, colName);
     if (index !== -1) {
       obj[key] = row[index];
     } else {
       obj[key] = null;
     }
-  }
+  });
   return obj;
 }
 
@@ -460,6 +480,10 @@ function getProkerData() {
     if (data.length <= 1) return [];
     
     const headers = data[0];
+    if (!headers || !Array.isArray(headers)) {
+      Logger.log('Error: headers empty in getProkerData');
+      return [];
+    }
     const rows = data.slice(1);
     
     // Mapping internal key -> Nama Kolom di Spreadsheet
@@ -468,7 +492,7 @@ function getProkerData() {
       nama: 'Nama_Proker',
       divisiId: 'Divisi_ID',
       picId: 'PIC_ID',
-      tanggal: 'Tanggal_Pelaksana',
+      tanggal: 'Tanggal_Pelaksanaan',
       proposal: 'Proposal',
       rak: 'RAK',
       rab: 'RAB',
@@ -517,6 +541,10 @@ function getAllRapatData() {
     if (data.length <= 1) return [];
     
     const headers = data[0];
+    if (!headers || !Array.isArray(headers)) {
+      Logger.log('Error: headers empty in getAllRapatData');
+      return [];
+    }
     const rows = data.slice(1);
     
     const mapping = {
@@ -524,7 +552,7 @@ function getAllRapatData() {
       prokerId: 'PROKER_ID',
       namaProker: 'NAMA_PROKER',
       jenisRapat: 'JENIS_RAPAT',
-      tanggal: 'TANGGAL_RAP',
+      tanggal: 'TANGGAL_RAPAT',
       pic: 'PIC',
       picEmail: 'PIC_EMAIL',
       statusRapat: 'STATUS_RAPAT',

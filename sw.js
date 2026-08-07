@@ -1,4 +1,4 @@
-const CACHE_NAME = 'himagro-hub-v3';
+const CACHE_NAME = 'himagro-hub-v4';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -7,7 +7,6 @@ const ASSETS_TO_CACHE = [
     './manifest.json',
     './Logo/Himagro.png',
     './Logo/Unsil.png',
-    './Logo/Kabinet.png',
     './Logo/BluSpeed.png',
     './Logo/Berdampak.png'
 ];

@@ -2302,3 +2302,55 @@ tr.status-success td:first-child {
         font-size: 0.85rem;
     }
 }
+
+/* App Footer Styling */
+.app-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 0.5rem 1rem 0.5rem 1rem;
+    margin-top: 1rem;
+    gap: 0.3rem;
+    font-family: 'Inter', sans-serif;
+}
+
+.footer-hosted {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: #0284c7;
+}
+
+.footer-bolt {
+    color: #f59e0b;
+    font-size: 1rem;
+}
+
+.footer-copyright {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #94a3b8;
+    letter-spacing: 0.5px;
+}
+
+.footer-help {
+    font-size: 0.925rem;
+    color: #94a3b8;
+}
+
+.footer-help-link {
+    color: #10b981;
+    font-weight: 700;
+    text-decoration: underline;
+    transition: var(--transition-fast);
+}
+
+.footer-help-link:hover {
+    color: #059669;
+    text-decoration: underline;
+}
